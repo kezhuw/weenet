@@ -380,6 +380,7 @@ weenet_library_unload(struct weenet_atom *name) {
 struct weenet_service *
 weenet_service_new(struct weenet_atom *name, struct weenet_process *p, uintptr_t data, uintptr_t meta) {
 	struct weenet_library *lib = weenet_library_open(name);
+	if (lib == NULL) return NULL;
 	void *instance = lib->interface->new(p, data, meta);
 	if (instance == NULL) {
 		weenet_library_unref(lib);
