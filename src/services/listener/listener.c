@@ -190,6 +190,7 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 		weenet_event_monitor(l->self, SESSION_ZERO, fd, WEVENT_ADD, WEVENT_READ);
 		break;
 	case WMESSAGE_TYPE_EVENT:
+		if (l->forward == NULL) return 0;
 		for (;;) {
 			int conn = accept(fd, NULL, NULL);
 			if (conn < 0) {
