@@ -24,6 +24,8 @@ int weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t ta
 struct weenet_process *weenet_process_retain(struct weenet_process *p);
 bool weenet_process_release(struct weenet_process *p);
 
+int weenet_init_process();
+
 // FIXME (type, flag, resource_id)
 //
 // resource_id	collect message content after no-one-knows.

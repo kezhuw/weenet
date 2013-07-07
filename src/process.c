@@ -58,7 +58,7 @@ static struct slab *message_slab;
 //static uint64_t message_mem_granularity = 10000;
 //
 int
-weenet_bootstrap_process() {
+weenet_init_process() {
 	process_slab = slab_new(1024, sizeof(struct weenet_process));
 	message_slab = slab_new(10240, sizeof(struct weenet_message));
 	return 0;
