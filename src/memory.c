@@ -61,7 +61,7 @@ wrealloc(void *ptr, size_t size) {
 	*((size_t*)newptr) = size;
 	memory_sub(oldsize);
 	memory_add(size);
-	return RETPTR(ptr);
+	return RETPTR(newptr);
 }
 
 char *
