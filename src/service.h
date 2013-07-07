@@ -49,7 +49,7 @@ int weenet_service_handle(struct weenet_service *c, struct weenet_process *p, st
 // Interfaces for library authors. {{
 struct weenet_instance;		// enfore strong typed system
 typedef struct weenet_instance *(*service_new_t)(struct weenet_process *p, uintptr_t data, uintptr_t meta);
-typedef void (*service_delete_t)(struct weenet_instance *c);
+typedef void (*service_delete_t)(struct weenet_instance *c, struct weenet_process *p);
 typedef int (*service_handle_t)(struct weenet_instance *c, struct weenet_process *p, struct weenet_message *msg);
 typedef void *(*service_reload_t)(struct weenet_instance *c, struct weenet_process *p, uint32_t oldVersion);
 

@@ -151,7 +151,8 @@ listener_new(struct weenet_process *p, uintptr_t data, uintptr_t meta) {
 }
 
 static void
-listener_delete(struct listener *l) {
+listener_delete(struct listener *l, struct weenet_process *p) {
+	(void)p;
 	wfree(l);
 }
 

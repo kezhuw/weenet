@@ -116,7 +116,8 @@ logger_new(struct weenet_process *p, uintptr_t data, uintptr_t meta) {
 }
 
 static void
-logger_delete(struct logger *l) {
+logger_delete(struct logger *l, struct weenet_process *p) {
+	(void)p;
 	_delete(l);
 }
 

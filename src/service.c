@@ -402,7 +402,7 @@ weenet_service_delete(struct weenet_service *c, struct weenet_process *p) {
 	(void)p;
 	struct weenet_library *lib = c->library;
 	if (lib->interface->delete) {
-		lib->interface->delete(c->instance);
+		lib->interface->delete(c->instance, p);
 	}
 	weenet_library_unref(lib);
 	_free_service(c);
