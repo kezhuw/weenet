@@ -317,14 +317,12 @@ weenet_library_path(const char *path, size_t len, int op) {
 }
 
 static struct weenet_library *
-weenet_library_open(const char *name, size_t len) {
-	struct weenet_atom *atom = weenet_atom_new(name, len);
-	name = weenet_atom_str(atom);
+weenet_library_open(struct weenet_atom *name) {
 	struct map *m = &M;
 	_lock_map(m);
-	struct weenet_library *lib = _search(m, name);
+	struct weenet_library *lib = _search(m, weenet_atom_str(name));
 	if (lib == NULL) {
-		lib = _open(&P, name, len);
+		lib = _open(&P, weenet_atom_str(name), weenet_atom_len(name));
 		if (lib == NULL) {
 			_unlock_map(m);
 			return NULL;
@@ -337,11 +335,8 @@ weenet_library_open(const char *name, size_t len) {
 }
 
 int
-weenet_library_reload(const char *name) {
-	size_t len = strlen(name);
-	name = weenet_atom_str(weenet_atom_new(name, len));
-
-	struct weenet_library *lib = _open(&P, name, len);
+weenet_library_reload(struct weenet_atom *name) {
+	struct weenet_library *lib = _open(&P, weenet_atom_str(name), weenet_atom_len(name));
 	if (lib == NULL) return ESRCH;
 
 	bool dup = false;
@@ -370,12 +365,10 @@ weenet_library_reload(const char *name) {
 }
 
 int
-weenet_library_unload(const char *name) {
+weenet_library_unload(struct weenet_atom *name) {
 	struct map *m = &M;
-	name = weenet_atom_str(weenet_atom_new(name, strlen(name)));
-
 	_lock_map(m);
-	struct weenet_library *lib = _delete(m, name);
+	struct weenet_library *lib = _delete(m, weenet_atom_str(name));
 	_unlock_map(m);
 	if (lib == NULL) {
 		return ENOENT;
@@ -391,8 +384,8 @@ weenet_library_unload(const char *name) {
 #define _free_service(c)	wfree(c);
 
 struct weenet_service *
-weenet_service_new(const char *name, struct weenet_process *p, uintptr_t data, uintptr_t meta) {
-	struct weenet_library *lib = weenet_library_open(name, strlen(name));
+weenet_service_new(struct weenet_atom *name, struct weenet_process *p, uintptr_t data, uintptr_t meta) {
+	struct weenet_library *lib = weenet_library_open(name);
 	void *instance = lib->interface->new(p, data, meta);
 	if (instance == NULL) {
 		weenet_library_unref(lib);

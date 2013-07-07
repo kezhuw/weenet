@@ -43,9 +43,9 @@ struct weenet_process {
 	} wait;
 	int64_t refcnt;
 	bool retired;
+	struct weenet_atom *name;
 	struct weenet_service *service;
 	struct weenet_mailbox mailbox;
-	const char *name;	// atom name
 };
 
 static /*__thread*/ struct slab *process_slab;
@@ -441,8 +441,8 @@ weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 	struct weenet_process *p = weenet_process_calloc();
 	p->refcnt = 1;
 	p->id = weenet_account_enroll(p);
-	p->name = weenet_atom_str(weenet_atom_new(name, strlen(name)));
-	p->service = weenet_service_new(name, p, data, meta);
+	p->name = weenet_atom_new(name, strlen(name));
+	p->service = weenet_service_new(p->name, p, data, meta);
 	if (p->service == NULL) {
 		weenet_process_release(p);
 		weenet_process_retire(p);
@@ -481,7 +481,8 @@ weenet_process_release(struct weenet_process *p) {
 	assert(ref >= 0);
 	if (ref == 0) {
 		if (!p->retired) {
-			weenet_logger_fatalf("%s(%ld) unexpected terminated.\n", p->name, (long)p->id);
+			weenet_logger_fatalf("process[%ld name(%s)] unexpected terminated.\n",
+				(long)p->id, weenet_atom_str(p->name));
 		}
 		weenet_process_delete(p);
 		weenet_account_unlink(p->id);

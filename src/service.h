@@ -1,6 +1,8 @@
 #ifndef __WEENET_SERVICE_H_
 #define __WEENET_SERVICE_H_
 
+#include "atom.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -11,14 +13,14 @@ int weenet_init_service();
 // ESRCH	No library with 'name' find;
 // EEXIST	The version of new library is same as older;
 // ENOENT	There is no old library loaded, and 'name' library just loaded.
-int weenet_library_reload(const char *name);
+int weenet_library_reload(struct weenet_atom *name);
 
 // Return values:
 //
 // ENOENT means that no library with 'name' is loaded;
 // EBUSY means that there are processes runing code loaded by 'name' library,
 // 	and library will be unload after all these processes were retired.
-int weenet_library_unload(const char *name);
+int weenet_library_unload(struct weenet_atom *name);
 
 
 struct weenet_process;
@@ -39,7 +41,7 @@ enum {
 const char *weenet_library_path(const char *path, size_t len, int op);
 
 
-struct weenet_service *weenet_service_new(const char *name, struct weenet_process *p, uintptr_t data, uintptr_t meta);
+struct weenet_service *weenet_service_new(struct weenet_atom *name, struct weenet_process *p, uintptr_t data, uintptr_t meta);
 void weenet_service_delete(struct weenet_service *c, struct weenet_process *p);
 int weenet_service_handle(struct weenet_service *c, struct weenet_process *p, struct weenet_message *m);
 
