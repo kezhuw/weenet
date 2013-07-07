@@ -98,6 +98,6 @@ weenet_message_type(struct weenet_message *msg) {
 }
 
 session_t weenet_process_timeo(struct weenet_process *p, uint64_t msecs);
-void weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst);
+struct weenet_process *weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst);
 void weenet_process_demonitor(struct weenet_process *p, struct weenet_process *dst);
 #endif

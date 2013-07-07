@@ -622,10 +622,11 @@ weenet_process_resume(struct weenet_process *p) {
 	return true;
 }
 
-void
+struct weenet_process *
 weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
 	// FIXME
-	(void)p; (void)dst;
+	(void)p;
+	return dst;
 //	weenet_monitor_record(&p->monitor, m, MONITING);
 //	weenet_monitor_record(&m->monitor, p, MONITORED);
 }
