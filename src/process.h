@@ -34,14 +34,19 @@ bool weenet_process_release(struct weenet_process *p);
 // 	FLAG_REQUEST		// message that expect a response
 // 	FLAG_RESPONSE		// message that response other's request
 enum wmessage_info {
+	// resource finalization function has the form:
+	// 	void finalize(void *ud, uintptr_t data, uintptr_t meta);
+	//
 	// resource id start {{
-	// weenet will register these with corresponding finalization function
 	WMESSAGE_RIDX_NONE		= 0,	// no finalization needed
 
 	WMESSAGE_RIDX_UDEF_START	= 1,
 	WMESSAGE_RIDX_UDEF_STOP		= 207,
 
+	// weenet will register these with corresponding finalization function
 	WMESSAGE_RIDX_RESERVED		= 208,	// [RESERVED, 255] predefined usage
+	WMESSAGE_RIDX_LOG		= 251,
+	WMESSAGE_RIDX_PROC		= 252,	// 'data' is retained process
 	WMESSAGE_RIDX_FILE		= 253,
 	WMESSAGE_RIDX_RAWMEM		= 254,
 	WMESSAGE_RIDX_MEMORY		= 255,

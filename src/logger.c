@@ -178,13 +178,13 @@ _wrapped_free(void *ud, uintptr_t data, uintptr_t size) {
 }
 
 int
-weenet_init_logger(const char *dir) {
+weenet_init_logger(const char *dir, size_t limit) {
 	assert(L == NULL);
-	L = weenet_process_new("logger", (uintptr_t)dir, 0);
+	L = weenet_process_new("logger", (uintptr_t)dir, (uintptr_t)limit);
 	if (L == NULL) return -1;
 	M = _new();
 
-	weenet_message_gc(/*WMESSAGE_FINI_LOGGER*/0, NULL, _wrapped_free);
+	weenet_message_gc(WMESSAGE_RIDX_LOG, NULL, _wrapped_free);
 
 	return 0;
 }
