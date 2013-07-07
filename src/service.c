@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <dlfcn.h>
 
+#include <stdio.h>
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -235,7 +236,13 @@ _open(struct path *p, const char *name, size_t nlen) {
 		filename[size-1] = '\0';
 
 		struct shared_dynamic *dynamic = dlopen(filename, RTLD_NOW);
-		if (dynamic == NULL) continue;
+		if (dynamic == NULL) {
+			char *err = dlerror();
+			if (err != NULL) {
+				fprintf(stdout, "dlopen(%s, RTLD_NOW) failed[%s]\n", filename, err);
+			}
+			continue;
+		}
 
 		const struct weenet_interface *interface = dlsym(dynamic, exported);
 		if (interface == NULL || interface->new == NULL || interface->handle == NULL) {
