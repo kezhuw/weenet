@@ -42,7 +42,7 @@ static int
 _open(struct logger *l) {
 	char ts[30];
 	if (!_now(ts, sizeof(ts))) {
-		strlcpy(ts, "time-formation-failed", sizeof ts);
+		strcpy(ts, "time-formation-failed");
 	}
 	int seq = l->seq + 1;
 	for (int i=0; ; ++i) {
