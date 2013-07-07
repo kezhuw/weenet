@@ -428,10 +428,9 @@ weenet_service_handle(struct weenet_service *c, struct weenet_process *p, struct
 			}
 			c->instance = instance;
 		}
-		// unref older, ref upgrade, link to upgrade ?
-		weenet_library_unref(lib);
-		lib = c->library = upgrade;
-		lib->upgrade = NULL;
+		struct weenet_library *old = lib;
+		lib = c->library = weenet_library_ref(upgrade);
+		weenet_library_unref(old);
 	}
 handle_message:
 	return lib->interface->handle(c->instance, p, m);
