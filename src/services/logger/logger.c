@@ -52,14 +52,17 @@ _open(struct logger *l) {
 		}
 		for (;;) {
 			int fd = open(l->path, O_CREAT | O_EXCL/* | O_SYNC*/, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-			switch (errno) {
-			case EEXIST:
-				goto nexti;
-			case EINTR:
-				continue;	// open again
-			default:
-				perror("open() creating log file failed");
-				return -1;
+			if (fd < 0) {
+				switch (errno) {
+				case EEXIST:
+					fprintf(stderr, "open(%s) existed.\n", l->path);
+					goto nexti;
+				case EINTR:
+					continue;	// open again
+				default:
+					fprintf(stderr, "open(%s) creating log file failed[%s].\n", l->path, strerror(errno));
+					return -1;
+				}
 			}
 			l->seq = seq;
 			return fd;
