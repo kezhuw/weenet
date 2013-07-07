@@ -1,42 +1,68 @@
+NAME = weenet
+
 default : all
 
 CC = clang
 CFLAGS = -Wall -Wextra
 LDFLAGS = -lpthread -llua -ldl
 
+PREFIX = /usr/local
+INSTALL_ETC = $(PREFIX)/etc
+INSTALL_BIN = $(PREFIX)/bin
+INSTALL_LIB = $(PREFIX)/lib
+INSTALL_INC = $(PREFIX)/include
+INSTALL_SERVICES_DIR = $(INSTALL_LIB)/$(NAME)/services
+INSTALL_INCLUDES_DIR = $(INSTALL_INC)/$(NAME)
+INSTALL = install -v
+
 BUILD = build
+BUILD_SERVICES_DIR = $(BUILD)/services
 
 SERVICES = listener logger #lua
+WEENET_BIN = $(BUILD)/$(NAME)
+WEENET_CONF = etc/weenet.conf
+SERVICES_DIR = $(BUILD)/services
+SERVICES_BIN = $(addprefix $(SERVICES_DIR)/, $(addsuffix .so, $(SERVICES)))
 
-#self = $1
+INCS = weenet.h atom.h atomic.h event.h timer.h types.h logger.h memory.h process.h service.h
+HEADERS = $(addprefix src/, $(INCS))
+
 define SERVICE_SRC
 $(addprefix src/services/, $(addprefix $1/, $(addsuffix .c, $1)))
 endef
 
-define SERVICE_LIB
-$(addprefix $(BUILD)/services/, $(addsuffix .so, $1))
-endef
-
-KERNEL := $(shell uname -s)
-
 SRCS = atom.c event.c logger.c pipe.c memory.c process.c service.c slab.c main.c schedule.c timer.c
 
-$(BUILD)/weenet: $(addprefix src/, $(SRCS)) | $(BUILD)
+$(WEENET_BIN) : $(addprefix src/, $(SRCS)) | $(BUILD)
+	@echo "Building weenet ..."
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
+	@echo "Done"
+	@echo
 
 %.c : %.h
 	@touch $@
 
 # build every services
 .SECONDEXPANSION:
-$(addprefix $(BUILD)/services/, $(addsuffix .so, $(SERVICES))) : build/services/%.so : $$(call SERVICE_SRC, %)
+$(SERVICES_BIN) : build/services/%.so : $$(call SERVICE_SRC, %)
+	@echo "Building service: $*"
 	$(CC) $(CFLAGS) -shared -fPIC $^ -o $@ -Isrc
+	@echo "Done"
+	@echo
 
-$(BUILD) : $(BUILD)/services/
-$(BUILD)/services/ :
+$(BUILD) : $(BUILD_SERVICES_DIR)
+
+$(BUILD_SERVICES_DIR) $(INSTALL_SERVICES_DIR) $(INSTALL_INCLUDES_DIR):
 	@mkdir -p $@
 
-all : $(addprefix $(BUILD)/, weenet $(addsuffix .so, $(addprefix services/, $(SERVICES))))
+all : $(WEENET_BIN) $(SERVICES_BIN)
+
+install : $(INSTALL_SERVICES_DIR) $(INSTALL_INCLUDES_DIR)
+	$(INSTALL) $(WEENET_BIN) $(INSTALL_BIN)
+	$(INSTALL) $(WEENET_CONF) $(INSTALL_ETC)
+	$(INSTALL) $(SERVICES_BIN) $(INSTALL_SERVICES_DIR)
+	$(INSTALL) $(HEADERS) $(INSTALL_INCLUDES_DIR)
+	@echo "#include \"weenet/weenet.h\"" > $(INSTALL_INC)/weenet.h
 
 clean :
 	rm -rf $(BUILD)
