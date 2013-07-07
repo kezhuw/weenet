@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-int weenet_init_service();
+int weenet_init_service(const char *path);
 
 // Return values:
 //

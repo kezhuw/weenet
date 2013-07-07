@@ -140,7 +140,7 @@ main(int argc, const char *argv[]) {
 
 	weenet_init_scheduler(threads);
 	weenet_init_process();
-	weenet_init_service();
+	weenet_init_service(NULL);
 	weenet_event_start(102400);
 	weenet_init_logger(log_dir, 1024*1024*10);
 

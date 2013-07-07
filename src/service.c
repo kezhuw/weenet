@@ -263,12 +263,6 @@ _open(struct path *p, const char *name, size_t nlen) {
 	return NULL;
 }
 
-int
-weenet_init_service() {
-	library_slab = slab_new(32, sizeof(struct weenet_library));
-	return 0;
-}
-
 const char *
 weenet_library_path(const char *path, size_t len, int op) {
 	struct path *p = &P;
@@ -427,4 +421,14 @@ weenet_service_handle(struct weenet_service *c, struct weenet_process *p, struct
 	}
 handle_message:
 	return lib->interface->handle(c->instance, p, m);
+}
+
+int
+weenet_init_service(const char *path) {
+	library_slab = slab_new(32, sizeof(struct weenet_library));
+	if (path != NULL) {
+		weenet_library_path(path, strlen(path), WPATH_NEW);
+		weenet_library_path(NULL, 0, WPATH_RETURN);
+	}
+	return 0;
 }
