@@ -441,6 +441,7 @@ weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 	struct weenet_process *p = weenet_process_calloc();
 	p->refcnt = 1;
 	p->id = weenet_account_enroll(p);
+	p->name = weenet_atom_str(weenet_atom_new(name, strlen(name)));
 	p->service = weenet_service_new(name, p, data, meta);
 	if (p->service == NULL) {
 		weenet_process_release(p);
