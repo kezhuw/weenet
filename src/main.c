@@ -146,11 +146,26 @@ main(int argc, const char *argv[]) {
 	size_t num = 0;
 	struct service *services = _get_services(L, &num);
 
-	weenet_init_scheduler(threads);
-	weenet_init_process();
-	weenet_init_service(service_path);
-	weenet_event_start(102400);
-	weenet_init_logger(log_dir, 1024*1024*10);
+	if (weenet_init_scheduler(threads) != 0) {
+		fprintf(stderr, "fail to start scheduler.\n");
+		exit(-1);
+	}
+	if (weenet_init_process() != 0) {
+		fprintf(stderr, "fail to start process module.\n");
+		exit(-1);
+	}
+	if (weenet_init_service(service_path) != 0) {
+		fprintf(stderr, "fail to start service module.\n");
+		exit(-1);
+	}
+	if (weenet_event_start(102400) != 0) {
+		fprintf(stderr, "fail to start event service.\n");
+		exit(-1);
+	}
+	if (weenet_init_logger(log_dir, 1024*1024*10) != 0) {
+		fprintf(stderr, "fail to start logger service.\n");
+		exit(-1);
+	}
 
 	if (services != NULL) {
 		for (size_t i=0; i<num; ++i) {
