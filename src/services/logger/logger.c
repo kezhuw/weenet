@@ -30,23 +30,24 @@ struct logger {
 	char dir[];	// dir/seq-create_time.i.log
 };
 
+#define TS_MAX		24
+#define TS_FMT		"%F-%T"
+
 static size_t
 _now(char *buf, size_t len) {
 	time_t t = time(NULL);
 	struct tm tm;
 	localtime_r(&t, &tm);
-	return strftime(buf, len, "%F", &tm);
+	return strftime(buf, len, TS_FMT, &tm);
 }
 
 static int
 _open(struct logger *l) {
-	char ts[30];
-	if (!_now(ts, sizeof(ts))) {
-		strcpy(ts, "time-formation-failed");
-	}
+	char ts[TS_MAX];
+	_now(ts, sizeof(ts));
 	int seq = l->seq + 1;
 	for (int i=0; ; ++i) {
-		size_t n = snprintf(l->path, sizeof(l->path), "%s/%d-%s.%d.log", l->dir, seq, ts, i);
+		size_t n = snprintf(l->path, sizeof(l->path), "%s/%d.%s.%d.log", l->dir, seq, ts, i);
 		if (n >= sizeof(l->path)) {
 			return -1;
 		}
@@ -147,11 +148,8 @@ logger_handle(struct logger *l, struct weenet_process *p, struct weenet_message 
 		if (m->meta == 0) {
 			return 0;
 		}
-		char buf[30];
+		char buf[TS_MAX];
 		size_t len = _now(buf, sizeof buf);
-		if (len == 0) {
-			len = sizeof(buf);
-		}
 		struct iovec v[3];
 		size_t n = 2;
 		v[0].iov_base = buf;
