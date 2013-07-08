@@ -3,7 +3,7 @@ NAME = weenet
 default : all
 
 CC = clang
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra -g
 LDFLAGS = -lpthread -llua -ldl
 
 PREFIX = /usr/local
@@ -35,7 +35,7 @@ SRCS = atom.c event.c logger.c pipe.c memory.c process.c service.c slab.c main.c
 
 $(WEENET_BIN) : $(addprefix src/, $(SRCS)) | $(BUILD)
 	@echo "Building weenet ..."
-	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $(LDFLAGS) -Wl,-E $^ -o $@
 	@echo "Done"
 	@echo
 
