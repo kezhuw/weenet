@@ -171,8 +171,6 @@ weenet_mailbox_num(struct weenet_mailbox *b) {
 	return b->num;
 }
 
-#include <stdio.h>
-
 static struct weenet_message *
 weenet_mailbox_pop(struct weenet_mailbox *b) {
 	weenet_atomic_lock(&b->lock);
@@ -186,8 +184,6 @@ weenet_mailbox_pop(struct weenet_mailbox *b) {
 	struct weenet_message *msg = b->mbox[head++];
 	b->head = head;
 	b->num -= 1;
-	fprintf(stderr, "pop[%p]: num(%d) size(%d) head(%d) rear(%d).\n",
-		b, (int)b->num, (int)b->size, (int)b->head, (int)b->rear);
 	weenet_atomic_unlock(&b->lock);
 	return msg;
 }
@@ -206,8 +202,6 @@ weenet_mailbox_push(struct weenet_mailbox *b, struct weenet_message *m) {
 	if (sleeping) {
 		b->active = true;
 	}
-	fprintf(stderr, "push[%p]: num(%d) size(%d) head(%d) rear(%d).\n",
-		b, (int)b->num, (int)b->size, (int)b->head, (int)b->rear);
 	weenet_atomic_unlock(&b->lock);
 	return sleeping;
 }
