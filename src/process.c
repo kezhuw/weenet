@@ -259,62 +259,6 @@ done:
 	wfree(mbox);
 }
 
-//struct weenet_message *
-//weenet_mailbox_pop(struct weenet_mailbox *mbox) {
-//	struct mail *mail;
-//	assert(mbox->active == 1);	// The only reader.
-//	lock(&mbox->lock);
-//	mail = mbox->first;
-//	if (mail != NULL) {
-//		mbox->first = mail->link;
-//		unlock(&mbox->lock);
-//		__sync_sub_and_fetch(&mbox->number, 1);	// bug: without lock, may reduce to < 0.
-//		return &mail->body;
-//	}
-//	mbox->active = 0;
-//	unlock(&mbox->lock);
-//	return NULL;
-//}
-//
-//// True, indicates that reader is in sleeping; Caller need to wake it up.
-//bool
-//weenet_mailbox_push(struct weenet_mailbox *mbox, struct weenet_message *msg) {
-//	struct mail *mail = (void*)((char*)msg - offsetof(struct mail, body));
-//	mail->link = NULL;
-//	bool sleeping = false;
-//	lock(&mbox->lock);
-//	if (mbox->first == NULL) {
-//		mbox->first = mail;
-//		mbox->last = mail;
-//		if (mbox->active == 0) {
-//			mbox->active = 1;
-//			sleeping = true;
-//		}
-//	} else {
-//		mbox->last->link = mail;
-//		mbox->last = mail;
-//		assert(mbox->active == 1);
-//	}
-//	unlock(&mbox->lock);
-//	__sync_add_and_fetch(&mbox->number, 1);
-//	return sleeping;
-//}
-//
-//void
-//weenet_mailbox_insert(struct weenet_mailbox *mbox, struct weenet_message *msg) {
-//	assert(mbox->active == 1);	// There is no reader.
-//	struct mail *mail = (void*)((char*)msg - offsetof(struct mail, body));
-//	lock(&mbox->lock);
-//	struct mail *first = mbox->first;
-//	mail->link = first;
-//	mbox->first = mail;
-//	if (first == NULL) {
-//		mbox->last = mail;
-//	}
-//	unlock(&mbox->lock);
-//	__sync_add_and_fetch(&mbox->number, 1);
-//}
-
 struct weenet_account {
 	size_t len;
 	size_t size;
