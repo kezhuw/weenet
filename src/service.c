@@ -187,6 +187,9 @@ weenet_library_delete(struct weenet_library *lib) {
 	if (lib->upgrade) {
 		weenet_library_unref(lib->upgrade);
 	}
+	if (lib->interface->fini != NULL) {
+		lib->interface->fini();
+	}
 	dlclose(lib->dynamic);
 	slab_release(library_slab, lib);
 }
