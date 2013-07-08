@@ -135,12 +135,20 @@ main(int argc, const char *argv[]) {
 	}
 	lua_pop(L, 1);
 
+	const char *service_path = WEENET_DEFAULT_SERVICE_PATH;
+	lua_getglobal(L, "service_path");
+	if (lua_type(L, -1) == LUA_TSTRING) {
+		service_path = lua_tostring(L, -1);
+		assert(service_path != NULL);
+	}
+	lua_pop(L, 1);
+
 	size_t num = 0;
 	struct service *services = _get_services(L, &num);
 
 	weenet_init_scheduler(threads);
 	weenet_init_process();
-	weenet_init_service(NULL);
+	weenet_init_service(service_path);
 	weenet_event_start(102400);
 	weenet_init_logger(log_dir, 1024*1024*10);
 
