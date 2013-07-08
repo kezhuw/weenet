@@ -79,7 +79,7 @@ _get_services(lua_State *L, size_t *nump) {
 			lua_pop(L, 1);	// pop i-th service table
 
 			if (((num+1) ^ num) > num) {
-				services = wrealloc(services, 2*num + 1);
+				services = wrealloc(services, (2*num + 1)*sizeof(struct service));
 			}
 			services[num].name = name;
 			services[num].data = data;
