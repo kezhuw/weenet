@@ -83,9 +83,15 @@ _parse(char *addr, size_t len, int *family, char **host, char **port) {
 }
 
 static int
-_option(int fd) {
+_noblocking(int fd) {
 	int nb = 1;
-	if (ioctl(fd, FIONBIO, &nb) != 0) return -1;
+	return ioctl(fd, FIONBIO, &nb);
+}
+
+
+static int
+_option(int fd) {
+	if (_noblocking(fd) == -1) return -1;
 	int reuse = 1;
 	return setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 }
@@ -205,6 +211,9 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 					return -1;
 				}
 				continue;
+			}
+			if (_noblocking(conn) == -1) {
+				weenet_logger_fatalf("set noblocking mode failed: %s\n", strerror(errno));
 			}
 			weenet_process_push(l->forward, l->self, 0, WMESSAGE_TYPE_FILE, (uintptr_t)conn, 0);
 		}
