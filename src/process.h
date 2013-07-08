@@ -23,6 +23,8 @@ int weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t ta
 
 struct weenet_process *weenet_process_retain(struct weenet_process *p);
 bool weenet_process_release(struct weenet_process *p);
+bool weenet_process_retire(struct weenet_process *p);
+
 
 int weenet_init_process();
 
@@ -40,6 +42,7 @@ enum wmessage_info {
 	// 	void finalize(void *ud, uintptr_t data, uintptr_t meta);
 	//
 	// resource id start {{
+	WMESSAGE_RIDX_MASK		= 255,
 	WMESSAGE_RIDX_NONE		= 0,	// no finalization needed
 
 	WMESSAGE_RIDX_UDEF_START	= 1,
@@ -84,6 +87,7 @@ struct weenet_message {
 };
 
 inline static uint32_t weenet_message_type(struct weenet_message *msg);
+inline static uint32_t weenet_message_ridx(struct weenet_message *msg);
 
 int weenet_message_gc(uint32_t id, void *ud, void (*fini)(void *ud, uintptr_t data, uintptr_t meta));
 void weenet_message_ref(struct weenet_message *msg);
@@ -95,6 +99,11 @@ void weenet_process_mail(struct weenet_process *p, struct weenet_message *m);
 inline static uint32_t
 weenet_message_type(struct weenet_message *msg) {
 	return (msg->tags & WMESSAGE_TYPE_MASK);
+}
+
+inline static uint32_t
+weenet_message_ridx(struct weenet_message *msg) {
+	return (msg->tags & WMESSAGE_RIDX_MASK);
 }
 
 session_t weenet_process_timeo(struct weenet_process *p, uint64_t msecs);

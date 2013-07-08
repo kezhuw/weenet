@@ -51,17 +51,10 @@ struct weenet_process {
 static /*__thread*/ struct slab *process_slab;
 static struct slab *message_slab;
 
-//struct process_config {
-//};
-//
-//static uint64_t process_mem_granularity = 1000;
-//static uint64_t message_mem_granularity = 10000;
-//
-int
-weenet_init_process() {
-	process_slab = slab_new(1024, sizeof(struct weenet_process));
-	message_slab = slab_new(10240, sizeof(struct weenet_message));
-	return 0;
+static void
+_ridx_memory_free(void *ud, uintptr_t data, uintptr_t meta) {
+	(void)ud; (void)meta;
+	wfree((void*)data);
 }
 
 struct weenet_process *
@@ -76,22 +69,12 @@ weenet_process_free(struct weenet_process *p) {
 	slab_release(process_slab, p);
 }
 
-#define WMESSAGE_FINI_SIZE	64
-#define WMESSAGE_FINI_MASK	(WMESSAGE_FINI_SIZE-1)
-
 static struct {
 	struct {
 		void *ud;
 		void (*fn)(void *ud, uintptr_t data, uintptr_t meta);
-	} finis[WMESSAGE_FINI_SIZE];
+	} finis[WMESSAGE_RIDX_MASK+1];
 } F;
-
-static uint32_t
-tags_to_fini_seq(uint32_t tags) {
-	// TODO
-	(void)tags;
-	return 0;
-}
 
 //enum {
 //	WFINALIZER_SET,
@@ -102,7 +85,7 @@ tags_to_fini_seq(uint32_t tags) {
 int
 weenet_message_gc(uint32_t id, void *ud, void (*fini)(void *ud, uintptr_t data, uintptr_t meta)) {
 	if (id == 0) return EINVAL;
-	if (id >= WMESSAGE_FINI_SIZE) return ERANGE;
+	if (id > WMESSAGE_RIDX_MASK) return ERANGE;
 	if (F.finis[id].fn != NULL) return EEXIST;
 	F.finis[id].ud = ud;
 	F.finis[id].fn = fini;
@@ -124,10 +107,10 @@ weenet_message_new(process_t source, process_t session, uint32_t tags, uintptr_t
 
 void
 weenet_message_delete(struct weenet_message *m) {
-	uint32_t seq = tags_to_fini_seq(m->tags);
-	void (*fn)(void *ud, uintptr_t data, uintptr_t meta) = F.finis[seq].fn;
+	uint32_t idx = weenet_message_ridx(m);
+	void (*fn)(void *ud, uintptr_t data, uintptr_t meta) = F.finis[idx].fn;
 	if (fn != NULL) {
-		void *ud = F.finis[seq].ud;
+		void *ud = F.finis[idx].ud;
 		fn(ud, m->data, m->meta);
 	}
 	slab_release(message_slab, m);
@@ -161,11 +144,11 @@ weenet_mailbox_expand(struct weenet_mailbox *b) {
 	b->mbox = wrealloc(b->mbox, sizeof(void*) * newsize);
 	// Mailbox is full, two situations:
 	//
-	//   1) head(0) ------ rear(size)
-	//   2) ----- head(rear) --------
+	//   1) ----- head(rear) --------
+	//   2) head(0) ------ rear(size)	rare, need no special handling
 	uint32_t rear = b->rear;
-	if (rear != size) {
-		// Situation 2.
+	if (rear == b->head) {
+		// Situation 1.
 		assert(b->head == b->rear);
 		if (rear < size/2) {
 			// Copy (0 <---> rear) to (size <---> size+rear).
@@ -188,6 +171,8 @@ weenet_mailbox_num(struct weenet_mailbox *b) {
 	return b->num;
 }
 
+#include <stdio.h>
+
 static struct weenet_message *
 weenet_mailbox_pop(struct weenet_mailbox *b) {
 	weenet_atomic_lock(&b->lock);
@@ -201,6 +186,8 @@ weenet_mailbox_pop(struct weenet_mailbox *b) {
 	struct weenet_message *msg = b->mbox[head++];
 	b->head = head;
 	b->num -= 1;
+	fprintf(stderr, "pop[%p]: num(%d) size(%d) head(%d) rear(%d).\n",
+		b, (int)b->num, (int)b->size, (int)b->head, (int)b->rear);
 	weenet_atomic_unlock(&b->lock);
 	return msg;
 }
@@ -219,6 +206,8 @@ weenet_mailbox_push(struct weenet_mailbox *b, struct weenet_message *m) {
 	if (sleeping) {
 		b->active = true;
 	}
+	fprintf(stderr, "push[%p]: num(%d) size(%d) head(%d) rear(%d).\n",
+		b, (int)b->num, (int)b->size, (int)b->head, (int)b->rear);
 	weenet_atomic_unlock(&b->lock);
 	return sleeping;
 }
@@ -626,7 +615,7 @@ struct weenet_process *
 weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
 	// FIXME
 	(void)p;
-	return dst;
+	return weenet_process_retain(dst);
 //	weenet_monitor_record(&p->monitor, m, MONITING);
 //	weenet_monitor_record(&m->monitor, p, MONITORED);
 }
@@ -635,4 +624,16 @@ void
 weenet_process_demonitor(struct weenet_process *p, struct weenet_process *dst) {
 	// FIXME
 	(void)p; (void)dst;
+	weenet_process_release(dst);
+}
+
+int
+weenet_init_process() {
+	process_slab = slab_new(1024, sizeof(struct weenet_process));
+	message_slab = slab_new(10240, sizeof(struct weenet_message));
+	weenet_message_gc(WMESSAGE_RIDX_MEMORY, NULL, _ridx_memory_free);
+	T = wmalloc(sizeof(*T) + 65535*sizeof(void*));
+	T->size = 65535;
+	T->processes = (void*)(T+1);
+	return 0;
 }
