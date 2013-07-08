@@ -3,11 +3,15 @@
 #include "memory.h"
 #include "process.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <assert.h>
 #include <stdarg.h>
 #include <string.h>
 #include <stdbool.h>
+
+#include <sys/stat.h>
+#include <sys/types.h>
 
 static struct weenet_process *L;
 
@@ -179,6 +183,10 @@ _wrapped_free(void *ud, uintptr_t data, uintptr_t size) {
 
 int
 weenet_init_logger(const char *dir, size_t limit) {
+	if (mkdir(dir, 0644) != 0 && errno == EACCES) {
+		fprintf(stderr, "mkdir(%s, 0644) failed: %s\n", dir, strerror(EACCES));
+		return -1;
+	}
 	assert(L == NULL);
 	L = weenet_process_new("logger", (uintptr_t)dir, (uintptr_t)limit);
 	if (L == NULL) return -1;
