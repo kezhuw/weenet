@@ -183,8 +183,8 @@ _wrapped_free(void *ud, uintptr_t data, uintptr_t size) {
 
 int
 weenet_init_logger(const char *dir, size_t limit) {
-	if (mkdir(dir, 0644) != 0 && errno == EACCES) {
-		fprintf(stderr, "mkdir(%s, 0644) failed: %s\n", dir, strerror(EACCES));
+	if (mkdir(dir, 0755) != 0 && errno == EACCES) {
+		fprintf(stderr, "mkdir(%s, 0755) failed: %s\n", dir, strerror(EACCES));
 		return -1;
 	}
 	assert(L == NULL);

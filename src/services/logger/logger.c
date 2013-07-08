@@ -52,7 +52,7 @@ _open(struct logger *l) {
 			return -1;
 		}
 		for (;;) {
-			int fd = open(l->path, O_CREAT | O_EXCL/* | O_SYNC*/, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+			int fd = open(l->path, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 			if (fd < 0) {
 				switch (errno) {
 				case EEXIST:
