@@ -18,7 +18,7 @@ enum wevent_filter {
 	WEVENT_ERROR	= 3,		// Only return by event monitor
 	WEVENT_EOF	= 4,		// must can be bitwised with READ/WRITE
 
-	// WEVENT_CLEAR	= 0x1000,	// EPOLLET in linux
+	// WEVENT_CLEAR	= 0x1000,	// EPOLLET in linux, must be enfored in asynchronous reporting
 	WEVENT_ONESHOT	= 0x2000,	// deleted after reported
 	WEVENT_DISPATCH	= 0x4000,	// disabled after reported, EPOLLONESHOT
 };

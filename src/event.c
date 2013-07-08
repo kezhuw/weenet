@@ -46,6 +46,14 @@ struct event_data {
 #define _lock_event(e)		weenet_atomic_lock(&e->lock)
 #define _unlock_event(e)	weenet_atomic_unlock(&e->lock)
 
+enum {
+	EPOLL_READ		= EPOLLIN | EPOLLPRI | EPOLLET,
+	EPOLL_WRITE		= EPOLLOUT | EPOLLET,
+
+	EPOLL_READ_MASK		= EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP | EPOLLRDHUP,
+	EPOLL_WRITE_MASK	= EPOLLOUT | EPOLLHUP,
+};
+
 static void *
 _poll(void *arg) {
 	pthread_detach(pthread_self());
@@ -82,40 +90,40 @@ _poll(void *arg) {
 			_lock_data(d);
 			uint32_t revent = d->read.event;
 			uint32_t wevent = d->write.event;
-			if (((e & (EPOLLIN|EPOLLPRI|EPOLLERR|EPOLLHUP|EPOLLRDHUP)) && _recorded(revent))) {
+			if ((e & EPOLL_READ_MASK) && _recorded(revent)) {
 				read.source = d->read.source;
 				read.session = d->read.session;
 				if ((revent & (WEVENT_ONESHOT|WEVENT_DISPATCH))) {
-					if ((revent & WEVENT_DISPATCH)) {
-						revent |= WEVENT_DISABLED;
-						d->read.event |= WEVENT_DISABLED;
-					} else {
+					if ((revent & WEVENT_ONESHOT)) {
 						revent = 0;
 						d->read.event = 0;
+					} else {
+						revent |= WEVENT_DISABLED;
+						d->read.event |= WEVENT_DISABLED;
 					}
 					struct epoll_event ev;
 					ev.data.ptr = d;
 					if (_recorded(wevent)) {
-						ev.events = EPOLLOUT;
+						ev.events = EPOLL_WRITE;
 						epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 					} else {
 						epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev);
 					}
 				}
 			}
-			if ((e & (EPOLLOUT|EPOLLHUP)) && _recorded(wevent)) {
+			if ((e & EPOLL_WRITE_MASK) && _recorded(wevent)) {
 				write.source = d->write.source;
 				write.session = d->write.session;
 				if ((wevent & (WEVENT_ONESHOT|WEVENT_DISPATCH))) {
-					if ((wevent & WEVENT_DISPATCH)) {
-						d->write.event |= WEVENT_DISABLED;
-					} else {
+					if ((wevent & WEVENT_ONESHOT)) {
 						d->write.event = 0;
+					} else {
+						d->write.event |= WEVENT_DISABLED;
 					}
 					struct epoll_event ev;
 					ev.data.ptr = d;
 					if (_recorded(revent)) {
-						ev.events = EPOLLIN|EPOLLPRI;
+						ev.events = EPOLL_READ;
 						epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 					} else {
 						epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev);
@@ -124,9 +132,11 @@ _poll(void *arg) {
 			}
 			_unlock_data(d);
 			if (read.source != 0) {
+				fprintf(stderr, "fd[%d] is readable\n", fd);
 				weenet_process_send(read.source, 0, read.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, fd, WEVENT_READ);
 			}
 			if (write.source != 0) {
+				fprintf(stderr, "fd[%d] is writable\n", fd);
 				weenet_process_send(write.source, 0, write.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, fd, WEVENT_WRITE);
 			}
 		}
@@ -219,7 +229,7 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 			}
 			if (!_disabled(d->read.event)) {
 				if (_recorded(d->write.event)) {
-					ev.events = EPOLLOUT;
+					ev.events = EPOLL_WRITE;
 					err = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 				} else {
 					err = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev);
@@ -245,10 +255,10 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 				}
 			}
 			if (_recorded(d->write.event)) {
-				ev.events = EPOLLIN | EPOLLPRI | EPOLLOUT;
+				ev.events = EPOLL_READ | EPOLL_WRITE;
 				err = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 			} else {
-				ev.events = EPOLLIN | EPOLLPRI;
+				ev.events = EPOLL_READ;
 				err = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
 			}
 			if (err != 0) {
@@ -266,7 +276,7 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 			}
 			if (!_disabled(d->write.event)) {
 				if (_recorded(d->read.event)) {
-					ev.events = EPOLLIN | EPOLLPRI;
+					ev.events = EPOLL_READ;
 					err = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 				} else {
 					err = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev);
@@ -292,10 +302,10 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 				}
 			}
 			if (_recorded(d->read.event)) {
-				ev.events = EPOLLIN | EPOLLPRI | EPOLLOUT;
+				ev.events = EPOLL_READ | EPOLL_WRITE;
 				err = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
 			} else {
-				ev.events = EPOLLOUT;
+				ev.events = EPOLL_WRITE;
 				err = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
 			}
 			if (err != 0) {
@@ -412,12 +422,12 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 	default:
 		return EINVAL;
 	}
-	if ((event & WEVENT_CLEAR)) {
-		op |= EV_CLEAR;
-	}
-	if ((event & WEVENT_DISPATCH)) {
+	if ((event & WEVENT_ONESHOT)) {
+		op |= EV_ONESHOT;
+	} else if ((event & WEVENT_DISPATCH)) {
 		op |= EV_DISPATCH;
 	}
+	op |= EV_CLEAR;
 
 	void *udata = (void*)((uintptr_t)source | ((uintptr_t)session << 32));
 	struct kevent ev;
