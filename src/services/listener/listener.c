@@ -158,43 +158,40 @@ listener_new(struct weenet_process *p, uintptr_t data, uintptr_t meta) {
 }
 
 static void
-listener_delete(struct listener *l, struct weenet_process *p) {
-	(void)p;
+listener_delete(struct listener *l) {
+	close(l->fd);
 	wfree(l);
 }
 
 static int
 listener_handle(struct listener *l, struct weenet_process *p, struct weenet_message *m) {
-	(void)p;
-
 	int fd = l->fd;
-	if (fd == -1) return -1;		// retired
-
 	uint32_t type = weenet_message_type(m);
 	switch (type) {
-	case WMESSAGE_TYPE_RETIRE:		// someone retire listener
-		weenet_process_demonitor(p, l->monitor);
-		weenet_event_monitor(l->self, SESSION_ZERO, fd, WEVENT_DELETE, WEVENT_READ);
-		close(fd);
-		l->fd = -1;
-		l->forward = NULL;
-		break;
-	case WMESSAGE_TYPE_DEMONITOR:		// 'forward' process retired
-		weenet_event_monitor(l->self, SESSION_ZERO, fd, WEVENT_DELETE, WEVENT_READ);
-		weenet_process_demonitor(p, l->monitor);
-		l->forward = NULL;
-		break;
-
-	case WMESSAGE_TYPE_BOOT:
-		if (l->forward != NULL) {
-			weenet_logger_errorf("listener(%s) already booted, forward to %llu.\n",
-				l->address, (uint64_t)(uintptr_t)weenet_process_self(l->forward));
-			return -1;
+	case WMESSAGE_TYPE_TEXT:
+		;struct weenet_process *forward = (void*)m->data;
+		if (l->monitor != 0) {
+			l->monitor = 0;
+			weenet_process_demonitor(p, l->monitor);
+			if (forward == NULL) {
+				weenet_event_monitor(l->self, 0, fd, WEVENT_DELETE, WEVENT_READ);
+			}
+		} else if (forward != NULL) {
+			weenet_event_monitor(l->self, 0, fd, WEVENT_ADD, WEVENT_READ);
 		}
-		l->forward = (struct weenet_process *)m->data;
-		l->monitor = weenet_process_monitor(p, l->forward);
-		weenet_process_release(l->forward);	// XXX retained by weenet_message_new() ?
-		weenet_event_monitor(l->self, SESSION_ZERO, fd, WEVENT_ADD, WEVENT_READ);
+		l->forward = forward;
+		if (forward != NULL) {
+			l->monitor = weenet_process_monitor(p, forward);
+		}
+		if ((m->tags & WMESSAGE_FLAG_REQUEST)) {
+			weenet_process_send(m->source, l->self, m->session, WMESSAGE_FLAG_RESPONSE, 0, 0);
+		}
+		break;
+	case WMESSAGE_TYPE_RETIRED:
+		assert(l->monitor == (monitor_t)m->meta && l->forward == (void*)m->data);
+		l->monitor = 0;
+		l->forward = NULL;
+		weenet_event_monitor(l->self, 0, fd, WEVENT_DELETE, WEVENT_READ);
 		break;
 	case WMESSAGE_TYPE_EVENT:
 		if (l->forward == NULL) return 0;
@@ -216,13 +213,12 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 			if (_noblocking(conn) == -1) {
 				weenet_logger_fatalf("set noblocking mode failed: %s\n", strerror(errno));
 			}
-			weenet_process_push(l->forward, l->self, 0, WMESSAGE_TYPE_FILE, (uintptr_t)conn, 0);
+			weenet_process_push(l->forward, l->self, 0, WMESSAGE_TYPE_FILE|WMESSAGE_RIDX_FILE, (uintptr_t)conn, 0);
 		}
 		break;
 	default:
-		return -1;
+		break;
 	}
-
 	return 0;
 }
 
