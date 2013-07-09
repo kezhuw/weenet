@@ -3,7 +3,7 @@ NAME = weenet
 default : all
 
 CC = clang
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -std=c99 -Wall -Wextra -g
 LDFLAGS = -lpthread -llua -ldl
 
 PREFIX = /usr/local

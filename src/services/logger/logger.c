@@ -1,3 +1,5 @@
+#define _BSD_SOURCE
+
 #include "timer.h"
 #include "memory.h"
 #include "process.h"
@@ -9,14 +11,15 @@
 #include <limits.h>
 #include <unistd.h>
 #include <sys/uio.h>
+#include <sys/stat.h>
+#ifdef __linux__
+#include <linux/limits.h>	// for PATH_MAX
+#endif
 
 #include <stdio.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <string.h>
-#ifdef __linux__
-#include <bsd/string.h>
-#endif
 
 struct logger {
 	int fd;
