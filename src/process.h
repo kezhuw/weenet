@@ -23,7 +23,7 @@ int weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t ta
 
 struct weenet_process *weenet_process_retain(struct weenet_process *p);
 bool weenet_process_release(struct weenet_process *p);
-bool weenet_process_retire(struct weenet_process *p);
+void weenet_process_retire(struct weenet_process *p);
 
 
 int weenet_init_process();
@@ -70,11 +70,15 @@ enum wmessage_info {
 	WMESSAGE_TYPE_WAKEUP		= 10 << 16,	// delete it ? equal to DUMMY
 	WMESSAGE_TYPE_RETIRE		= 11 << 16,
 	WMESSAGE_TYPE_DEMONITOR		= 12 << 16,
+	WMESSAGE_TYPE_RETIRED		= 13 << 16,
 	WMESSAGE_TYPE_UDEF_START	= 32767 << 16,
 	WMESSAGE_TYPE_UDEF_STOP		= 65535 << 16,
 
 	WMESSAGE_FLAG_REQUEST		= 0x0100,
 	WMESSAGE_FLAG_RESPONSE		= 0x0200,
+	WMESSAGE_FLAG_INTERNAL		= 0x0400,
+
+	WMESSAGE_TAGS_RETIRED		= WMESSAGE_TYPE_RETIRED | WMESSAGE_RIDX_PROC | WMESSAGE_FLAG_INTERNAL,
 };
 
 struct weenet_message {
@@ -107,6 +111,6 @@ weenet_message_ridx(struct weenet_message *msg) {
 }
 
 session_t weenet_process_timeo(struct weenet_process *p, uint64_t msecs);
-struct weenet_process *weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst);
-void weenet_process_demonitor(struct weenet_process *p, struct weenet_process *dst);
+uintreg_t weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst);
+void weenet_process_demonitor(struct weenet_process *p, uintreg_t mref);
 #endif

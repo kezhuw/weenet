@@ -22,6 +22,7 @@
 struct listener {
 	int fd;
 	process_t self;
+	monitor_t monitor;
 	struct weenet_process *forward;
 	char address[];
 };
@@ -172,7 +173,7 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 	uint32_t type = weenet_message_type(m);
 	switch (type) {
 	case WMESSAGE_TYPE_RETIRE:		// someone retire listener
-		weenet_process_demonitor(p, l->forward);
+		weenet_process_demonitor(p, l->monitor);
 		weenet_event_monitor(l->self, SESSION_ZERO, fd, WEVENT_DELETE, WEVENT_READ);
 		close(fd);
 		l->fd = -1;
@@ -180,7 +181,7 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 		break;
 	case WMESSAGE_TYPE_DEMONITOR:		// 'forward' process retired
 		weenet_event_monitor(l->self, SESSION_ZERO, fd, WEVENT_DELETE, WEVENT_READ);
-		weenet_process_demonitor(p, l->forward);
+		weenet_process_demonitor(p, l->monitor);
 		l->forward = NULL;
 		break;
 
@@ -191,7 +192,7 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 			return -1;
 		}
 		l->forward = (struct weenet_process *)m->data;
-		weenet_process_monitor(p, l->forward);
+		l->monitor = weenet_process_monitor(p, l->forward);
 		weenet_process_release(l->forward);	// XXX retained by weenet_message_new() ?
 		weenet_event_monitor(l->self, SESSION_ZERO, fd, WEVENT_ADD, WEVENT_READ);
 		break;

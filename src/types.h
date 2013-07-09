@@ -11,8 +11,10 @@ typedef int (*func_t)();
 
 typedef uint32_t process_t;
 typedef uint32_t session_t;
+typedef uint32_t monitor_t;
 
 enum { SESSION_ZERO = 0 };
 enum { PROCESS_ZERO = 0 };
+enum { MONITOR_ZERO = 0 };
 
 #endif

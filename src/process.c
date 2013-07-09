@@ -31,7 +31,10 @@ struct weenet_mailbox {
 struct weenet_monitor {
 	uint32_t num;
 	uint32_t len;
-	struct weenet_process **procs;
+	struct {
+		uintreg_t mref;
+		struct weenet_process *proc;
+	} *monitors;
 };
 
 struct weenet_process {
@@ -41,11 +44,16 @@ struct weenet_process {
 		process_t source;
 		session_t session;
 	} wait;
-	int64_t refcnt;
-	bool retired;
 	struct weenet_atom *name;
 	struct weenet_service *service;
 	struct weenet_mailbox mailbox;
+
+	uint32_t mref;		// monitor reference, just/almost unique in this process.
+	int32_t refcnt;
+	int lock;	// protect 'retired' 'supervisors'
+	bool retired;	// integer ?
+	struct weenet_monitor supervisors;	// processes that monitoring this process
+	struct weenet_monitor supervisees;	// processes that this process monitoring
 };
 
 static /*__thread*/ struct slab *process_slab;
@@ -133,6 +141,82 @@ weenet_message_copy(struct weenet_message *msg, int n) {
 void
 weenet_message_unref(struct weenet_message *msg) {
 	weenet_message_copy(msg, -1);
+}
+
+static void
+weenet_monitor_retire(struct weenet_monitor *m, struct weenet_process *p) {
+	uint32_t n = m->num;
+	if (n != 0) {
+		weenet_atomic_add(&p->refcnt, (int32_t)n);
+		process_t self = p->id;
+		for (uint32_t i=0; i<n; ++i) {
+			weenet_process_push(m->monitors[i].proc, self, 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)p, m->monitors[i].mref);
+		}
+	}
+	wfree(m->monitors);
+	m->monitors = NULL;
+	m->num = m->len = 0;
+}
+
+static void
+weenet_monitor_insert(struct weenet_monitor *m, uintreg_t mref, struct weenet_process *proc) {
+	uint32_t n = m->num++;
+	if (n == m->len) {
+		m->len = 2*n + 1;
+		m->monitors = wrealloc(m->monitors, m->len * sizeof(m->monitors[0]));
+	}
+	m->monitors[n].mref = mref;
+	m->monitors[n].proc = proc;
+}
+
+static struct weenet_process *
+weenet_monitor_remove(struct weenet_monitor *m, uintreg_t mref, struct weenet_process *proc) {
+	uint32_t n = m->num;
+	if (n == 0) return false;
+	uint32_t last = n-1;
+	if (proc == NULL) {
+		// For supervisor, mref is ok to demonitor.
+		for (uint32_t i=0; i<=last; ++i) {
+			if (m->monitors[i].mref == mref) {
+				struct weenet_process *dst = m->monitors[i].proc;
+				if (i != last) {
+					m->monitors[i].mref = m->monitors[last].mref;
+					m->monitors[i].proc = m->monitors[last].proc;
+				}
+				m->num = last;
+				return dst;
+			}
+		}
+	} else {
+		for (uint32_t i=0; i<=last; ++i) {
+			if (m->monitors[i].mref == mref && m->monitors[i].proc == proc) {
+				if (i != last) {
+					m->monitors[i].mref = m->monitors[last].mref;
+					m->monitors[i].proc = m->monitors[last].proc;
+				}
+				m->num = last;
+				return NULL;
+			}
+		}
+	}
+	return NULL;
+}
+
+static void
+weenet_monitor_unlink(struct weenet_monitor *m, struct weenet_process *p) {
+	uint32_t n = m->num;
+	for (uint32_t i=0; i<n; ++i) {
+		struct weenet_process *dst = m->monitors[i].proc;
+		monitor_t mref = m->monitors[i].mref;
+		weenet_atomic_lock(&dst->lock);
+		if (!dst->retired) {
+			weenet_monitor_remove(&dst->supervisors, mref, p);
+		}	// else flush message, do it in weenet_process_work().
+		weenet_atomic_unlock(&dst->lock);
+	}
+	wfree(m->monitors);
+	m->monitors = NULL;
+	m->num = m->len = 0;
 }
 
 static void
@@ -265,7 +349,7 @@ struct weenet_account {
 	struct weenet_process **processes;
 };
 
-bool weenet_process_retire(struct weenet_process *p);
+void weenet_process_retire(struct weenet_process *p);
 
 static struct weenet_account *T;
 
@@ -332,13 +416,12 @@ weenet_account_retain(process_t pid) {
 	return p;
 }
 
-// XXX store 'retired' in account ?
-bool
+void
 weenet_account_retire(process_t pid) {
 	struct weenet_process *p = weenet_account_retain(pid);
-	if (p == NULL) return true;
+	if (p == NULL) return;
 	weenet_process_retire(p);
-	return weenet_process_release(p);
+	weenet_process_release(p);
 }
 
 // Return retained process, named with 'name'.
@@ -366,7 +449,7 @@ weenet_account_unregister(struct weenet_atom *name) {
 struct weenet_process *
 weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 	struct weenet_process *p = weenet_process_calloc();
-	p->refcnt = 1;
+	p->refcnt = 1;	// Two? One for new, one for all monitors?
 	p->id = weenet_account_enroll(p);
 	p->name = weenet_atom_new(name, strlen(name));
 	p->service = weenet_service_new(p->name, p, data, meta);
@@ -388,11 +471,17 @@ weenet_process_delete(struct weenet_process *p) {
 	weenet_process_free(p);
 }
 
-bool
+void
 weenet_process_retire(struct weenet_process *p) {
-	p->retired = true;
-	weenet_atomic_sync();
-	return weenet_process_release(p);
+	bool send = false;
+	weenet_atomic_lock(&p->lock);
+	if (!p->retired) {
+		send = p->retired = true;
+	}
+	weenet_atomic_unlock(&p->lock);
+	if (send) {
+		weenet_process_push(p, 0, 0, WMESSAGE_TYPE_RETIRED | WMESSAGE_FLAG_INTERNAL, 0, 0);
+	}
 }
 
 struct weenet_process *
@@ -404,7 +493,7 @@ weenet_process_retain(struct weenet_process *p) {
 // Called by unregister
 bool
 weenet_process_release(struct weenet_process *p) {
-	int64_t ref = weenet_atomic_sub(&p->refcnt, 1);
+	int32_t ref = weenet_atomic_sub(&p->refcnt, 1);
 	assert(ref >= 0);
 	if (ref == 0) {
 		if (!p->retired) {
@@ -442,10 +531,33 @@ weenet_process_boot(struct weenet_process *p, uint32_t tags, uintptr_t data, uin
 
 static bool
 weenet_process_work(struct weenet_process *p) {
-	struct weenet_message *m = weenet_mailbox_pop(&p->mailbox);
-	if (m == NULL) return false;
-	weenet_service_handle(p->service, p, m);
-	weenet_message_unref(m);
+	struct weenet_message *msg = weenet_mailbox_pop(&p->mailbox);
+	if (msg == NULL) return false;
+
+	if ((msg->tags & WMESSAGE_FLAG_INTERNAL)) {
+		msg->tags &= ~WMESSAGE_FLAG_INTERNAL;
+		uint32_t type = weenet_message_type(msg);
+		if (type == WMESSAGE_TYPE_RETIRED) {
+			struct weenet_process *dst = (struct weenet_process *)msg->data;
+			if (dst == NULL) {	// send by weenet_process_retire()
+				// 'p' is retired, no more lock need.
+				assert(p->retired == true);
+				// Send retired message to all processes that monitoring 'p'
+				weenet_monitor_retire(&p->supervisors, p);
+				weenet_monitor_unlink(&p->supervisees, p);
+				// XXX A dedicated 'RETIRED' service to terminate retired processes ?
+				weenet_process_release(p);
+			} else if (weenet_monitor_remove(&p->supervisees, (uintreg_t)msg->meta, NULL) != NULL) {
+				// Filter out cancelled monitoring.
+				weenet_service_handle(p->service, p, msg);
+			}
+		}
+		weenet_message_unref(msg);
+		return true;
+	}
+
+	weenet_service_handle(p->service, p, msg);
+	weenet_message_unref(msg);
 	return p->wait.session == SESSION_ZERO;
 }
 
@@ -454,13 +566,10 @@ weenet_process_wait(struct weenet_process *p, session_t sid) {
 	p->wait.session = sid;
 }
 
+// XXX Exported API should check invalid WMESSAGE_FLAG_INTERNAL message.
 void
 weenet_process_mail(struct weenet_process *p, struct weenet_message *m) {
-	if (p->retired) {
-		weenet_message_unref(m);
-		return;
-	}
-	if (p->wait.session != 0 && p->wait.session == m->session) {
+	if (p->wait.session != 0 && p->wait.session == m->session && (m->tags & WMESSAGE_FLAG_RESPONSE)) {
 		p->wait.session = 0;
 		weenet_mailbox_insert(&p->mailbox, m);
 		weenet_schedule_resume(p);
@@ -549,20 +658,36 @@ weenet_process_resume(struct weenet_process *p) {
 	return true;
 }
 
-struct weenet_process *
+uintreg_t
 weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
-	// FIXME
-	(void)p;
-	return weenet_process_retain(dst);
-//	weenet_monitor_record(&p->monitor, m, MONITING);
-//	weenet_monitor_record(&m->monitor, p, MONITORED);
+	uint64_t mref = weenet_atomic_inc(&p->mref);
+	bool retired = false;
+	weenet_atomic_lock(&dst->lock);
+	retired = dst->retired;
+	if (!retired) {
+		// XXX take a reference ?
+		// Semantics of this API requires retained 'dst',
+		// but the implementation seems not.
+		weenet_monitor_insert(&dst->supervisors, mref, p);
+	}
+	weenet_atomic_unlock(&dst->lock);
+	weenet_monitor_insert(&p->supervisees, mref, dst);
+	if (retired) {
+		weenet_process_push(p, dst->id, 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)weenet_process_retain(dst), (uintptr_t)mref);
+	}
+	return mref;
 }
 
 void
-weenet_process_demonitor(struct weenet_process *p, struct weenet_process *dst) {
-	// FIXME
-	(void)p; (void)dst;
-	weenet_process_release(dst);
+weenet_process_demonitor(struct weenet_process *p, uintreg_t mref) {
+	struct weenet_process *dst = weenet_monitor_remove(&p->supervisees, mref, NULL);
+	if (dst != NULL) {
+		weenet_atomic_lock(&dst->lock);
+		if (!dst->retired) {
+			weenet_monitor_remove(&dst->supervisors, mref, p);
+		}	// else flush message, do it in weenet_process_work().
+		weenet_atomic_unlock(&dst->lock);
+	}
 }
 
 int
