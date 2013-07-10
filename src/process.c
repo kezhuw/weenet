@@ -8,6 +8,7 @@
 #include "schedule.h"
 #include "slab.h"
 #include "timer.h"
+#include "utils.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -18,8 +19,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>	// for close()
-
-#define memzero(ptr, size)	memset(ptr, 0, size)
 
 struct weenet_mailbox {
 	uint32_t num;
