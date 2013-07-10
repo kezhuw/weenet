@@ -8,4 +8,9 @@ if [ "$WD" != "$DIR" ]; then
 	exit 1
 fi
 
-./../../build/weenet -c weenet.conf
+BIN='./../../build/weenet'
+if [ -f $BIN ] && [ -x $BIN ]; then
+	$BIN -c weenet.conf
+else
+	echo 'build weenet first'
+fi
