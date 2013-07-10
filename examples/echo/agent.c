@@ -38,7 +38,7 @@ agent_new(struct weenet_process *p, uintptr_t data) {
 	weenet_event_monitor(self, 0, fd, WEVENT_ADD, WEVENT_READ);
 
 	struct sockaddr_storage saddr;
-	socklen_t salen;
+	socklen_t salen = sizeof(saddr);
 	if (getpeername(fd, (struct sockaddr *)&saddr, &salen) != 0) {
 		perror("getpeername()");
 		return g;
@@ -47,7 +47,10 @@ agent_new(struct weenet_process *p, uintptr_t data) {
 	int err = getnameinfo((struct sockaddr *)&saddr, salen, addr, sizeof addr, port, sizeof port, NI_NUMERICHOST | NI_NUMERICSERV);
 	if (err != 0) {
 		fprintf(stderr, "getnameinfo() failed: %s\n", gai_strerror(err));
+		return g;
 	}
+
+	weenet_logger_printf("new connection from [%s]:%s\n", addr, port);
 
 	return g;
 }
