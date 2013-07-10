@@ -9,4 +9,6 @@
 
 #define WEENET_DEFAULT_THREADS		8
 
+#define WEENET_CUSTOM_MALLOC
+
 #endif

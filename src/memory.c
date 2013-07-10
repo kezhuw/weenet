@@ -1,5 +1,7 @@
-#include "memory.h"
+#include "config.h"
 
+#ifdef WEENET_CUSTOME_MALLOC
+#include "memory.h"
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -76,3 +78,4 @@ char *
 wstrdup(const char *str) {
 	return wstrldup(str, strlen(str));
 }
+#endif
