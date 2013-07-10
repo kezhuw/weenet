@@ -7,5 +7,6 @@
 *.so
 
 build
+log
 
 cscope.*
