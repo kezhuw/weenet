@@ -62,10 +62,14 @@ static struct memory *M;
 static struct memory *
 _new() {
 	struct memory *m = wmalloc(sizeof(struct memory));
-	m->last = &m->first;
-	m->busy = m->last;
+	m->lock = 0;
 	m->curr = (struct chunk *)m->first.bytes;
-	m->curr->info = _pack(BLOCK_SIZE, 1);
+	m->curr->info = _pack(BLOCK_SIZE, 0);
+	m->fail.chk = NULL;
+	m->fail.blk = NULL;
+	m->busy = &m->first;
+	m->last = &m->first;
+	m->first.link = NULL;
 	return m;
 }
 
