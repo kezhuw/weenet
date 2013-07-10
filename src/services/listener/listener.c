@@ -152,6 +152,7 @@ listener_new(struct weenet_process *p, uintptr_t data, uintptr_t meta) {
 	struct listener *l = wmalloc(sizeof(*l) + len + 1);
 	l->fd = fd;
 	l->self = weenet_process_self(p);
+	l->monitor = 0;
 	l->forward = NULL;
 	memcpy(l->address, address, len+1);
 	return l;
