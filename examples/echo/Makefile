@@ -1,13 +1,22 @@
-default : all
+default : debug
+
+debug : CFLAGS += -g -O0 -fsanitize=address -fno-omit-frame-pointer
+debug : normal
+
+release : CFLAGS += -g -O2
+release : normal
+
+release0 : CFLAGS += -O3
+release0 : normal
 
 CC = clang
-CFLAGS = -std=c99 -Wall -Wextra -g -shared -fPIC
+CFLAGS = -std=c99 -Wall -Wextra -shared -fPIC
 
 SERVICES = gate agent client
 
 LIBS = $(addsuffix .so, $(SERVICES))
 
-all : $(LIBS)
+normal : $(LIBS)
 
 $(LIBS) : %.so : %.c
 	$(CC) $(CFLAGS) $^ -o $@ -I../../src/
@@ -15,4 +24,4 @@ $(LIBS) : %.so : %.c
 clean :
 	-rm $(LIBS)
 
-.PHONY : default all
+.PHONY : default normal debug release release0 clean

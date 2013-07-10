@@ -6,4 +6,4 @@ all :
 clean :
 	cd echo; make clean
 
-.PHONY : default all
+.PHONY : default all clean

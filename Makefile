@@ -1,9 +1,18 @@
 NAME = weenet
 
-default : all
+default : debug
+
+debug : CFLAGS += -g -O0 -fsanitize=address -fno-omit-frame-pointer
+debug : normal
+
+release : CFLAGS += -g -O2
+release : normal
+
+release0 : CFLAGS += -O3
+release0 : normal
 
 CC = clang
-CFLAGS = -std=c99 -Wall -Wextra -g
+CFLAGS = -std=c99 -Wall -Wextra
 LDFLAGS = -lpthread -llua -ldl
 
 PREFIX = /usr/local
@@ -55,7 +64,7 @@ $(BUILD) : $(BUILD_SERVICES_DIR)
 $(BUILD_SERVICES_DIR) $(INSTALL_SERVICES_DIR) $(INSTALL_INCLUDES_DIR):
 	@mkdir -p $@
 
-all : $(WEENET_BIN) $(SERVICES_BIN)
+normal : $(WEENET_BIN) $(SERVICES_BIN)
 
 install : $(INSTALL_SERVICES_DIR) $(INSTALL_INCLUDES_DIR)
 	$(INSTALL) $(WEENET_BIN) $(INSTALL_BIN)
@@ -67,4 +76,4 @@ install : $(INSTALL_SERVICES_DIR) $(INSTALL_INCLUDES_DIR)
 clean :
 	rm -rf $(BUILD)
 
-.PHONY : all clean
+.PHONY : default normal debug release release0 clean
