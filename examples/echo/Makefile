@@ -10,7 +10,7 @@ LIBS = $(addsuffix .so, $(SERVICES))
 all : $(LIBS)
 
 $(LIBS) : %.so : %.c
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@ -I../../src/
 
 clean :
 	-rm $(LIBS)

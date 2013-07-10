@@ -8,4 +8,4 @@ if [ "$WD" != "$DIR" ]; then
 	exit 1
 fi
 
-weenet -c weenet.conf
+./../../build/weenet -c weenet.conf
