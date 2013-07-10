@@ -212,7 +212,7 @@ _vprintf(const char *prefix, size_t len, const char *fmt, va_list args) {
 	} else {
 		memcpy(ptr+len, buf, n);
 	}
-	weenet_process_push(L, 0, 0, /**/0, (uintptr_t)ptr, (uintptr_t)size);
+	weenet_process_push(L, 0, 0, WMESSAGE_RIDX_LOG, (uintptr_t)ptr, (uintptr_t)size);
 }
 
 #define S_PRINT		""
