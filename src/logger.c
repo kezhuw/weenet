@@ -1,8 +1,11 @@
+#define _POSIX_SOURCE
+
 #include "atomic.h"
 #include "logger.h"
 #include "memory.h"
 #include "process.h"
 
+#include <time.h>
 #include <errno.h>
 #include <stdio.h>
 #include <assert.h>
@@ -185,14 +188,51 @@ _wrapped_free(void *ud, uintptr_t data, uintptr_t size) {
 	_free(ptr);
 }
 
+#define TS_MAX		24
+#define TS_FMT		"%F-%T"
+
+static size_t
+_now(char *buf, size_t len) {
+	time_t t = time(NULL);
+	struct tm tm;
+	localtime_r(&t, &tm);
+	return strftime(buf, len, TS_FMT, &tm);
+}
+
+int
+_mkdir(const char *path) {
+	if (mkdir(path, 0755) != 0) {
+		int err = errno;
+		if (err != EEXIST) {
+			fprintf(stderr, "mkdir(%s, 0755) failed: %s\n", path, strerror(err));
+			return -1;
+		}
+	}
+	return 0;
+}
+
 int
 weenet_init_logger(const char *dir, size_t limit) {
-	if (mkdir(dir, 0755) != 0 && errno == EACCES) {
-		fprintf(stderr, "mkdir(%s, 0755) failed: %s\n", dir, strerror(EACCES));
+	assert(L == NULL);
+
+	if (_mkdir(dir) != 0) return -1;
+
+	size_t len = strlen(dir);
+	if (len == 0) {
+		fprintf(stderr, "dir is empty\n");
 		return -1;
 	}
-	assert(L == NULL);
-	L = weenet_process_new("logger", (uintptr_t)dir, (uintptr_t)limit);
+	char buf[len+TS_MAX+1];
+	memcpy(buf, dir, len);
+	if (buf[len-1] == '/') {
+		_now(buf+len, TS_MAX);
+	} else {
+		buf[len] = '/';
+		_now(buf+len+1, TS_MAX);
+	}
+	if (_mkdir(buf) != 0) return -1;
+
+	L = weenet_process_new("logger", (uintptr_t)buf, (uintptr_t)limit);
 	if (L == NULL) return -1;
 	M = _new();
 
