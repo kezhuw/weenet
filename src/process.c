@@ -384,7 +384,7 @@ void weenet_process_retire(struct weenet_process *p);
 
 static struct weenet_account *T;
 
-process_t
+static process_t
 weenet_account_enroll(struct weenet_process *p) {
 	++p->refcnt;
 	struct weenet_account *t = T;
@@ -399,30 +399,29 @@ weenet_account_enroll(struct weenet_process *p) {
 			return pid;
 		} else {
 			size_t size = t->size;
-			size += size/2;
-			t->processes = wrealloc(t->processes, size);
+			size += size/2+1;
+			t->processes = wrealloc(t->processes, size*sizeof(struct weenet_process*));
 			t->size = size;
 		}
 	}
 	assert(t->len < t->size);
-	process_t pid = (process_t)t->len++;
+	process_t pid = (process_t)++t->len;
 	t->processes[pid] = p;
 	weenet_atomic_unlock(&t->lock);
 	return pid;
 }
 
-void
+static void
 weenet_account_unlink(process_t pid) {
 	if (pid == PROCESS_ZERO) return;
 	struct weenet_account *t = T;
 	weenet_atomic_lock(&t->lock);
-	assert((size_t)pid < t->len);
+	assert((size_t)pid <= t->len);
 	if (t->processes[pid] == NULL) {
 		weenet_atomic_unlock(&t->lock);
 		return;
 	}
 	// FIXME another storage to store free-list info.
-	t->free.last = (intptr_t)pid;
 	if (t->free.first == 0) {
 		t->free.first = t->free.last = (intptr_t)pid;
 	} else {
@@ -430,6 +429,7 @@ weenet_account_unlink(process_t pid) {
 		t->free.last = (intptr_t)pid;
 	}
 	++t->free.number;
+	t->free.last = (intptr_t)pid;
 	t->processes[pid] = (void *)(intptr_t)(0);
 	weenet_atomic_unlock(&t->lock);
 }
@@ -533,8 +533,8 @@ weenet_process_release(struct weenet_process *p) {
 			weenet_logger_fatalf("process[%ld name(%s)] unexpected terminated.\n",
 				(long)p->id, weenet_atom_str(p->name));
 		}
-		weenet_process_delete(p);
 		weenet_account_unlink(p->id);
+		weenet_process_delete(p);
 		return true;
 	}
 	return false;
@@ -726,8 +726,8 @@ weenet_init_process() {
 	weenet_message_gc(WMESSAGE_RIDX_PROC, NULL, _process_resource_release);
 	weenet_message_gc(WMESSAGE_RIDX_RAWMEM, NULL, _rawmem_resource_release);
 	weenet_message_gc(WMESSAGE_RIDX_MEMORY, NULL, _memory_resource_release);
-	T = wmalloc(sizeof(*T) + 65535*sizeof(void*));
-	T->size = 65535;
-	T->processes = (void*)(T+1);
+	T = wcalloc(sizeof(*T));
+	T->size = 65536;
+	T->processes = wmalloc(T->size * sizeof(struct weenet_process *));
 	return 0;
 }
