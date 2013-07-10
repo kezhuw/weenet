@@ -77,6 +77,7 @@ enum wmessage_info {
 	WMESSAGE_FLAG_REQUEST		= 0x0100,
 	WMESSAGE_FLAG_RESPONSE		= 0x0200,
 	WMESSAGE_FLAG_INTERNAL		= 0x0400,
+	WMESSAGE_FLAG_MIGRATED		= 0x0500,	// resource ownership migrated to other
 
 	WMESSAGE_TAGS_RETIRED		= WMESSAGE_TYPE_RETIRED | WMESSAGE_RIDX_PROC | WMESSAGE_FLAG_INTERNAL,
 };
@@ -93,7 +94,13 @@ struct weenet_message {
 inline static uint32_t weenet_message_type(struct weenet_message *msg);
 inline static uint32_t weenet_message_ridx(struct weenet_message *msg);
 
-int weenet_message_gc(uint32_t id, void *ud, void (*fini)(void *ud, uintptr_t data, uintptr_t meta));
+typedef void (*resource_fini_t)(void *ud, uintptr_t data, uintptr_t meta);
+
+int weenet_message_gc(uint32_t id, void *ud, resource_fini_t fn);
+
+// Take the ownership of the resource.
+void weenet_message_take(struct weenet_message *msg);
+
 void weenet_message_ref(struct weenet_message *msg);
 void weenet_message_copy(struct weenet_message *msg, int n);
 void weenet_message_unref(struct weenet_message *msg);

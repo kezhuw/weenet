@@ -8,16 +8,17 @@
 #include "schedule.h"
 #include "slab.h"
 #include "timer.h"
+#include "utils.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <assert.h>
 #include <stddef.h>
+#include <stdlib.h>	// for free()
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
-
-#define memzero(ptr, size)	memset(ptr, 0, size)
+#include <unistd.h>	// for close()
 
 struct weenet_mailbox {
 	uint32_t num;
@@ -61,9 +62,29 @@ static /*__thread*/ struct slab *process_slab;
 static struct slab *message_slab;
 
 static void
-_ridx_memory_free(void *ud, uintptr_t data, uintptr_t meta) {
+_file_resource_release(void *ud, uintptr_t data, uintptr_t meta) {
+	(void)ud; (void)meta;
+	int fd = (int)data;
+	close(fd);
+}
+
+static void
+_rawmem_resource_release(void *ud, uintptr_t data, uintptr_t meta) {
+	(void)ud; (void)meta;
+	free((void*)data);
+}
+
+static void
+_memory_resource_release(void *ud, uintptr_t data, uintptr_t meta) {
 	(void)ud; (void)meta;
 	wfree((void*)data);
+}
+
+static void
+_process_resource_release(void *ud, uintptr_t data, uintptr_t meta) {
+	(void)ud; (void)meta;
+	struct weenet_process *p = (void*)data;
+	weenet_process_release(p);
 }
 
 struct weenet_process *
@@ -81,24 +102,21 @@ weenet_process_free(struct weenet_process *p) {
 static struct {
 	struct {
 		void *ud;
-		void (*fn)(void *ud, uintptr_t data, uintptr_t meta);
-	} finis[WMESSAGE_RIDX_MASK+1];
+		resource_fini_t fn;
+	} pairs[WMESSAGE_RIDX_MASK+1];
 } F;
 
-//enum {
-//	WFINALIZER_SET,
-//	WFINALIZER_RESET,
-//	WFINALIZER_CLEAR,
-//};
-//
 int
-weenet_message_gc(uint32_t id, void *ud, void (*fini)(void *ud, uintptr_t data, uintptr_t meta)) {
+weenet_message_gc(uint32_t id, void *ud, resource_fini_t fn) {
 	if (id == 0) return EINVAL;
 	if (id > WMESSAGE_RIDX_MASK) return ERANGE;
-	if (F.finis[id].fn != NULL) return EEXIST;
-	F.finis[id].ud = ud;
-	F.finis[id].fn = fini;
-	weenet_atomic_sync();
+	// Sufficent to protect (ud, fn) pair in F.
+	//
+	// In a single process, registration happens before
+	// sending a message with 'id', which happens before
+	// deletion of the message.
+	if (!weenet_atomic_cas(&F.pairs[id].fn, NULL, fn)) return EEXIST;
+	F.pairs[id].ud = ud;
 	return 0;
 }
 
@@ -116,13 +134,20 @@ weenet_message_new(process_t source, process_t session, uint32_t tags, uintptr_t
 
 void
 weenet_message_delete(struct weenet_message *m) {
-	uint32_t idx = weenet_message_ridx(m);
-	void (*fn)(void *ud, uintptr_t data, uintptr_t meta) = F.finis[idx].fn;
-	if (fn != NULL) {
-		void *ud = F.finis[idx].ud;
-		fn(ud, m->data, m->meta);
+	if ((m->tags & WMESSAGE_FLAG_MIGRATED) == 0) {
+		uint32_t idx = weenet_message_ridx(m);
+		resource_fini_t fn = F.pairs[idx].fn;
+		if (fn != NULL) {
+			fn(F.pairs[idx].ud, m->data, m->meta);
+		}
 	}
 	slab_release(message_slab, m);
+}
+
+// XXX Multicast message may exist race condition ?
+void
+weenet_message_take(struct weenet_message *msg) {
+	msg->tags |= WMESSAGE_FLAG_MIGRATED;
 }
 
 void
@@ -359,7 +384,7 @@ void weenet_process_retire(struct weenet_process *p);
 
 static struct weenet_account *T;
 
-process_t
+static process_t
 weenet_account_enroll(struct weenet_process *p) {
 	++p->refcnt;
 	struct weenet_account *t = T;
@@ -374,30 +399,29 @@ weenet_account_enroll(struct weenet_process *p) {
 			return pid;
 		} else {
 			size_t size = t->size;
-			size += size/2;
-			t->processes = wrealloc(t->processes, size);
+			size += size/2+1;
+			t->processes = wrealloc(t->processes, size*sizeof(struct weenet_process*));
 			t->size = size;
 		}
 	}
 	assert(t->len < t->size);
-	process_t pid = (process_t)t->len++;
+	process_t pid = (process_t)++t->len;
 	t->processes[pid] = p;
 	weenet_atomic_unlock(&t->lock);
 	return pid;
 }
 
-void
+static void
 weenet_account_unlink(process_t pid) {
 	if (pid == PROCESS_ZERO) return;
 	struct weenet_account *t = T;
 	weenet_atomic_lock(&t->lock);
-	assert((size_t)pid < t->len);
+	assert((size_t)pid <= t->len);
 	if (t->processes[pid] == NULL) {
 		weenet_atomic_unlock(&t->lock);
 		return;
 	}
 	// FIXME another storage to store free-list info.
-	t->free.last = (intptr_t)pid;
 	if (t->free.first == 0) {
 		t->free.first = t->free.last = (intptr_t)pid;
 	} else {
@@ -405,6 +429,7 @@ weenet_account_unlink(process_t pid) {
 		t->free.last = (intptr_t)pid;
 	}
 	++t->free.number;
+	t->free.last = (intptr_t)pid;
 	t->processes[pid] = (void *)(intptr_t)(0);
 	weenet_atomic_unlock(&t->lock);
 }
@@ -508,8 +533,8 @@ weenet_process_release(struct weenet_process *p) {
 			weenet_logger_fatalf("process[%ld name(%s)] unexpected terminated.\n",
 				(long)p->id, weenet_atom_str(p->name));
 		}
-		weenet_process_delete(p);
 		weenet_account_unlink(p->id);
+		weenet_process_delete(p);
 		return true;
 	}
 	return false;
@@ -697,9 +722,12 @@ int
 weenet_init_process() {
 	process_slab = slab_new(1024, sizeof(struct weenet_process));
 	message_slab = slab_new(10240, sizeof(struct weenet_message));
-	weenet_message_gc(WMESSAGE_RIDX_MEMORY, NULL, _ridx_memory_free);
-	T = wmalloc(sizeof(*T) + 65535*sizeof(void*));
-	T->size = 65535;
-	T->processes = (void*)(T+1);
+	weenet_message_gc(WMESSAGE_RIDX_FILE, NULL, _file_resource_release);
+	weenet_message_gc(WMESSAGE_RIDX_PROC, NULL, _process_resource_release);
+	weenet_message_gc(WMESSAGE_RIDX_RAWMEM, NULL, _rawmem_resource_release);
+	weenet_message_gc(WMESSAGE_RIDX_MEMORY, NULL, _memory_resource_release);
+	T = wcalloc(sizeof(*T));
+	T->size = 65536;
+	T->processes = wmalloc(T->size * sizeof(struct weenet_process *));
 	return 0;
 }

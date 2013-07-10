@@ -1,5 +1,6 @@
 #include "pipe.h"
 #include "memory.h"
+#include "utils.h"
 
 #include <sys/socket.h>
 #include <unistd.h>
@@ -10,8 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-
-#define memzero(ptr, len)	memset((ptr), 0, (len))
 
 static size_t
 iovec_copyin(struct iovec v[2], const char *src, size_t len) {

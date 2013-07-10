@@ -47,7 +47,8 @@ gate_handle(struct gate *g, struct weenet_process *p, struct weenet_message *m) 
 		weenet_logger_errorf("listern(%d) unexpected retired!\n", g->address);
 		break;
 	case WMESSAGE_TYPE_FILE:
-		;int fd = (int)m->data;
+		weenet_message_take(m);
+		int fd = (int)m->data;
 		struct weenet_process *agent = weenet_process_new("agent", (uintptr_t)fd, 0);
 		if (agent == NULL) {
 			weenet_logger_fatalf("agent start failed.\n");
