@@ -203,16 +203,21 @@ weenet_monitor_remove(struct weenet_monitor *m, uintreg_t mref, struct weenet_pr
 }
 
 static void
+_demonitor(struct weenet_process *p, monitor_t mref, struct weenet_process *src) {
+	weenet_atomic_lock(&p->lock);
+	if (!p->retired) {
+		weenet_monitor_remove(&p->supervisors, mref, src);
+	}	// else flush message, do it in weenet_process_work().
+	weenet_atomic_unlock(&p->lock);
+}
+
+static void
 weenet_monitor_unlink(struct weenet_monitor *m, struct weenet_process *p) {
 	uint32_t n = m->num;
 	for (uint32_t i=0; i<n; ++i) {
 		struct weenet_process *dst = m->monitors[i].proc;
 		monitor_t mref = m->monitors[i].mref;
-		weenet_atomic_lock(&dst->lock);
-		if (!dst->retired) {
-			weenet_monitor_remove(&dst->supervisors, mref, p);
-		}	// else flush message, do it in weenet_process_work().
-		weenet_atomic_unlock(&dst->lock);
+		_demonitor(dst, mref, p);
 	}
 	wfree(m->monitors);
 	m->monitors = NULL;
@@ -467,6 +472,7 @@ weenet_process_delete(struct weenet_process *p) {
 	if (p->service != NULL) {
 		weenet_service_delete(p->service, p);
 	}
+	weenet_monitor_unlink(&p->supervisees, p);
 	weenet_mailbox_cleanup(&p->mailbox);
 	weenet_process_free(p);
 }
@@ -544,7 +550,6 @@ weenet_process_work(struct weenet_process *p) {
 				assert(p->retired == true);
 				// Send retired message to all processes that monitoring 'p'
 				weenet_monitor_retire(&p->supervisors, p);
-				weenet_monitor_unlink(&p->supervisees, p);
 				// XXX A dedicated 'RETIRED' service to terminate retired processes ?
 				weenet_process_release(p);
 			} else if (weenet_monitor_remove(&p->supervisees, (uintreg_t)msg->meta, NULL) != NULL) {
@@ -682,11 +687,7 @@ void
 weenet_process_demonitor(struct weenet_process *p, uintreg_t mref) {
 	struct weenet_process *dst = weenet_monitor_remove(&p->supervisees, mref, NULL);
 	if (dst != NULL) {
-		weenet_atomic_lock(&dst->lock);
-		if (!dst->retired) {
-			weenet_monitor_remove(&dst->supervisors, mref, p);
-		}	// else flush message, do it in weenet_process_work().
-		weenet_atomic_unlock(&dst->lock);
+		_demonitor(dst, mref, p);
 	}
 }
 
