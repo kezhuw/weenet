@@ -10,6 +10,7 @@
 #include "timer.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -459,6 +460,7 @@ weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 	p->name = weenet_atom_new(name, strlen(name));
 	p->service = weenet_service_new(p->name, p, data, meta);
 	if (p->service == NULL) {
+		fprintf(stderr, "failed to start new process [%s].\n", name);
 		weenet_process_release(p);
 		weenet_process_retire(p);
 		return NULL;

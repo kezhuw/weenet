@@ -242,10 +242,10 @@ _open(struct path *p, const char *name, size_t nlen) {
 
 		struct shared_dynamic *dynamic = dlopen(filename, RTLD_NOW);
 		if (dynamic == NULL) {
-			char *err = dlerror();
-			if (err != NULL) {
-				fprintf(stdout, "dlopen(%s, RTLD_NOW) failed[%s]\n", filename, err);
-			}
+			//char *err = dlerror();
+			//if (err != NULL) {
+			//	fprintf(stdout, "dlopen(%s, RTLD_NOW) failed[%s]\n", filename, err);
+			//}
 			continue;
 		}
 
