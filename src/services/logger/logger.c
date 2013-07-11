@@ -153,6 +153,7 @@ logger_handle(struct logger *l, struct weenet_process *p, struct weenet_message 
 		}
 		char buf[TS_MAX];
 		size_t len = _now(buf, sizeof buf);
+		buf[len++] = ' ';
 		struct iovec v[3];
 		size_t n = 2;
 		v[0].iov_base = buf;
