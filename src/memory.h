@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef WEENET_CUSTOME_MALLOC
+#ifdef WEENET_CUSTOM_MALLOC
 
 void *wmalloc(size_t size);
 void *wcalloc(size_t size);	// zero-initialized memory

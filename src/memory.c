@@ -1,6 +1,6 @@
 #include "config.h"
 
-#ifdef WEENET_CUSTOME_MALLOC
+#ifdef WEENET_CUSTOM_MALLOC
 #include "memory.h"
 #include <stddef.h>
 #include <stdlib.h>
