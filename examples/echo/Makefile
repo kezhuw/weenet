@@ -10,7 +10,7 @@ release0 : CFLAGS += -O3
 release0 : normal
 
 CC = clang
-CFLAGS = -std=c99 -Wall -Wextra -shared -fPIC
+CFLAGS = -std=c99 -Wall -Wextra -Wconversion -shared -fPIC
 
 SERVICES = gate agent client
 

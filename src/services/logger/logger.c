@@ -50,8 +50,8 @@ _open(struct logger *l) {
 	_now(ts, sizeof(ts));
 	int seq = l->seq + 1;
 	for (int i=0; ; ++i) {
-		size_t n = snprintf(l->path, sizeof(l->path), "%s/%d.%s.%d.log", l->dir, seq, ts, i);
-		if (n >= sizeof(l->path)) {
+		int n = snprintf(l->path, sizeof(l->path), "%s/%d.%s.%d.log", l->dir, seq, ts, i);
+		if (n < 0 || (size_t)n >= sizeof(l->path)) {
 			return -1;
 		}
 		for (;;) {
@@ -155,7 +155,7 @@ logger_handle(struct logger *l, struct weenet_process *p, struct weenet_message 
 		size_t len = _now(buf, sizeof buf);
 		buf[len++] = ' ';
 		struct iovec v[3];
-		size_t n = 2;
+		int n = 2;
 		v[0].iov_base = buf;
 		v[0].iov_len = len;
 		v[1].iov_base = (void*)m->data;

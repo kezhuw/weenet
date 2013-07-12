@@ -115,11 +115,11 @@ main(int argc, const char *argv[]) {
 		return -1;
 	}
 
-	int threads = WEENET_DEFAULT_THREADS;
+	size_t threads = WEENET_DEFAULT_THREADS;
 	lua_getglobal(L, "threads");
 	int isnum;
 	if (lua_type(L, -1) != LUA_TNIL) {
-		threads = (int)lua_tointegerx(L, -1, &isnum);
+		threads = (size_t)lua_tointegerx(L, -1, &isnum);
 		if (!isnum) {
 			fprintf(stderr, "threads expect a number, got %s.\n", luaL_typename(L, -1));
 			return -1;

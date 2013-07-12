@@ -204,7 +204,7 @@ weenet_library_ref(struct weenet_library *lib) {
 
 static bool
 weenet_library_unref(struct weenet_library *lib) {
-	uint32_t refcnt = weenet_atomic_dec(&lib->refcnt);
+	int64_t refcnt = weenet_atomic_dec(&lib->refcnt);
 	if (refcnt == 0) {
 		weenet_library_delete(lib);
 		return true;

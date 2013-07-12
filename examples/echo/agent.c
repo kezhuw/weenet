@@ -109,7 +109,7 @@ agent_handle(struct agent *g, struct weenet_process *p, struct weenet_message *m
 						return 0;
 					}
 				}
-				n += rd;
+				n += (size_t)rd;
 				if (n == sizeof(g->buf)) {
 					_send(g, g->buf, n);
 					n = 0;

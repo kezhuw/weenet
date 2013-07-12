@@ -34,7 +34,7 @@ struct weenet_monitor {
 	uint32_t num;
 	uint32_t len;
 	struct {
-		uintreg_t mref;
+		monitor_t mref;
 		struct weenet_process *proc;
 	} *monitors;
 };
@@ -185,7 +185,7 @@ weenet_monitor_retire(struct weenet_monitor *m, struct weenet_process *p) {
 }
 
 static void
-weenet_monitor_insert(struct weenet_monitor *m, uintreg_t mref, struct weenet_process *proc) {
+weenet_monitor_insert(struct weenet_monitor *m, monitor_t mref, struct weenet_process *proc) {
 	uint32_t n = m->num++;
 	if (n == m->len) {
 		m->len = 2*n + 1;
@@ -281,7 +281,7 @@ weenet_mailbox_expand(struct weenet_mailbox *b) {
 	b->size = newsize;
 }
 
-inline static int32_t
+inline static uint32_t
 weenet_mailbox_num(struct weenet_mailbox *b) {
 	return b->num;
 }
@@ -568,7 +568,7 @@ weenet_process_work(struct weenet_process *p) {
 	if (msg == NULL) return false;
 
 	if ((msg->tags & WMESSAGE_FLAG_INTERNAL)) {
-		msg->tags &= ~WMESSAGE_FLAG_INTERNAL;
+		msg->tags &= ~(uint32_t)WMESSAGE_FLAG_INTERNAL;
 		uint32_t type = weenet_message_type(msg);
 		if (type == WMESSAGE_TYPE_RETIRED) {
 			struct weenet_process *dst = (struct weenet_process *)msg->data;
@@ -690,9 +690,9 @@ weenet_process_resume(struct weenet_process *p) {
 	return true;
 }
 
-uintreg_t
+monitor_t
 weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
-	uint64_t mref = weenet_atomic_inc(&p->mref);
+	monitor_t mref = weenet_atomic_inc(&p->mref);
 	bool retired = false;
 	weenet_atomic_lock(&dst->lock);
 	retired = dst->retired;
@@ -711,7 +711,7 @@ weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
 }
 
 void
-weenet_process_demonitor(struct weenet_process *p, uintreg_t mref) {
+weenet_process_demonitor(struct weenet_process *p, monitor_t mref) {
 	struct weenet_process *dst = weenet_monitor_remove(&p->supervisees, mref, NULL);
 	if (dst != NULL) {
 		_demonitor(dst, mref, p);

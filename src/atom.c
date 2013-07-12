@@ -111,7 +111,7 @@ _hash(const char *str, size_t len) {
 	uint32_t hash = SEED;
 	size_t n = (len < 0x10) ? len : 0x10;
 	for (size_t i=0; i<n; ++i) {
-		hash += str[i];
+		hash += (uint32_t)str[i];
 	}
 	return hash;
 }

@@ -118,6 +118,6 @@ weenet_message_ridx(struct weenet_message *msg) {
 }
 
 session_t weenet_process_timeo(struct weenet_process *p, uint64_t msecs);
-uintreg_t weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst);
-void weenet_process_demonitor(struct weenet_process *p, uintreg_t mref);
+monitor_t weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst);
+void weenet_process_demonitor(struct weenet_process *p, monitor_t mref);
 #endif

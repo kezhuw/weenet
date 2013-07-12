@@ -93,7 +93,7 @@ _next(struct memory *m) {
 	}
 }
 
-#define aligned(s)	((s+3)&~3)
+#define aligned(s)	((s+3)&~((size_t)3))
 
 static void *
 _block(struct memory *m, size_t size) {
@@ -241,27 +241,43 @@ weenet_init_logger(const char *dir, size_t limit) {
 	return 0;
 }
 
-void
-_vprintf(const char *prefix, size_t len, const char *fmt, va_list args) {
-	char buf[1024];
-	int n = vsnprintf(buf, sizeof(buf), fmt, args);
-	va_list saved_args;
-	va_copy(saved_args, args);
-	// XXX truncate large size
-	size_t size = (size_t)n + len;
-	char *ptr = _malloc(M, size);
-	memcpy(ptr, prefix, len);
-	if ((size_t)n > sizeof(buf)) {
-		vsnprintf(ptr+len, n, fmt, saved_args);
-	} else {
-		memcpy(ptr+len, buf, n);
-	}
-	weenet_process_push(L, 0, 0, WMESSAGE_RIDX_LOG, (uintptr_t)ptr, (uintptr_t)size);
-}
-
 #define S_PRINT		""
 #define S_ERROR		"ERROR "
 #define S_FATAL		"FATAL "
+
+const static char e_format[] = S_FATAL "fail to format logger string[%s]\n";
+
+void
+_vprintf(const char *prefix, size_t prelen, const char *fmt, va_list args) {
+	char buf[1024];
+	int n = vsnprintf(buf, sizeof(buf), fmt, args);
+	if (n < 0) {
+		fprintf(stderr, e_format, fmt);
+		n = snprintf(buf, sizeof(buf), e_format, fmt);
+		if (n > 0) {
+			size_t len = (size_t)n;
+			char *ptr = _malloc(M, len);
+			memcpy(ptr, buf, len);
+			weenet_process_push(L, 0, 0, WMESSAGE_RIDX_LOG, (uintptr_t)ptr, (uintptr_t)len);
+		} else {
+			weenet_process_push(L, 0, 0, 0, (uintptr_t)e_format, (uintptr_t)(sizeof(e_format)-1));
+		}
+		return;
+	}
+	va_list saved_args;
+	va_copy(saved_args, args);
+	// XXX truncate large size
+	size_t len = (size_t)n;
+	size_t size = prelen + len;
+	char *ptr = _malloc(M, size);
+	memcpy(ptr, prefix, prelen);
+	if (len > sizeof(buf)) {
+		vsnprintf(ptr+prelen, len, fmt, saved_args);
+	} else {
+		memcpy(ptr+prelen, buf, len);
+	}
+	weenet_process_push(L, 0, 0, WMESSAGE_RIDX_LOG, (uintptr_t)ptr, (uintptr_t)size);
+}
 
 void
 weenet_logger_printf(const char *fmt, ...) {

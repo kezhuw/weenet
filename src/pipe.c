@@ -269,7 +269,7 @@ spipe_writev(struct spipe *s, struct iovec v[2]) {
 		s->wend = (char*)s->first + s->chunksize;
 	}
 	v[0].iov_base = s->wpos;
-	v[0].iov_len = s->wend - s->wpos;
+	v[0].iov_len = (size_t)(s->wend - s->wpos);
 	v[1].iov_base = s->write->bytes;
 	v[1].iov_len = s->totalsize;
 	return v[0].iov_len + v[1].iov_len;

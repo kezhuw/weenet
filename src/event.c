@@ -133,11 +133,11 @@ _poll(void *arg) {
 			_unlock_data(d);
 			if (read.source != 0) {
 				fprintf(stderr, "fd[%d] is readable\n", fd);
-				weenet_process_send(read.source, 0, read.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, fd, WEVENT_READ);
+				weenet_process_send(read.source, 0, read.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, (uintptr_t)fd, WEVENT_READ);
 			}
 			if (write.source != 0) {
 				fprintf(stderr, "fd[%d] is writable\n", fd);
-				weenet_process_send(write.source, 0, write.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, fd, WEVENT_WRITE);
+				weenet_process_send(write.source, 0, write.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, (uintptr_t)fd, WEVENT_WRITE);
 			}
 		}
 	}
@@ -145,7 +145,7 @@ _poll(void *arg) {
 
 struct event {
 	int max;
-	int size;
+	size_t size;
 	int lock;
 	int epfd;
 	struct event_data **events;
@@ -161,7 +161,7 @@ weenet_event_start(int max) {
 		return -1;
 	}
 	struct event *e = wcalloc(sizeof(struct event));
-	e->size = max + 1024;
+	e->size = (size_t)max + 1024;
 	e->epfd = epfd;
 	e->events = wcalloc(sizeof(struct event_data *)*e->size);
 	assert(e->events != NULL);
@@ -187,7 +187,7 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 
 	struct event *e = E;
 	_lock_event(e);
-	if (fd >= e->size) {
+	if ((size_t)fd >= e->size) {
 		size_t size = 2*e->size + 1;
 		struct event_data **events = wrealloc(e->events, sizeof(void*)*size);
 		if (events == NULL) {
@@ -264,7 +264,7 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 			if (err != 0) {
 				err = errno;
 			}
-			d->read.event = event;
+			d->read.event = (uint32_t)event;
 			d->read.source = source;
 			d->read.session = session;
 		}
@@ -311,7 +311,7 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 			if (err != 0) {
 				err = errno;
 			}
-			d->write.event = event;
+			d->write.event = (uint32_t)event;
 			d->write.source = source;
 			d->write.session = session;
 		}

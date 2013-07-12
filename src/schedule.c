@@ -71,10 +71,11 @@ _work(void *arg) {
 }
 
 int
-weenet_init_scheduler(int nthread) {
+weenet_init_scheduler(size_t nthread) {
+	assert(nthread != 0);
 	assert(S == NULL);
 	struct schedule *s = wcalloc(sizeof(*s) + sizeof(struct worker)*nthread);
-	for (int i=0; i<nthread; ++i) {
+	for (size_t i=0; i<nthread; ++i) {
 		struct bpipe *pipe = bpipe_new(512, sizeof(struct weenet_process *));
 		s->workers[i].pipe = pipe;
 		s->workers[i].lock.write = 0;

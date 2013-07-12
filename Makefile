@@ -12,7 +12,7 @@ release0 : CFLAGS += -O3
 release0 : normal
 
 CC = clang
-CFLAGS = -std=c99 -Wall -Wextra
+CFLAGS = -std=c99 -Wall -Wextra -Wconversion
 LDFLAGS = -lpthread -llua -ldl
 
 PREFIX = /usr/local
