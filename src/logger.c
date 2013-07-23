@@ -245,7 +245,7 @@ weenet_init_logger(const char *dir, size_t limit) {
 #define S_ERROR		"ERROR "
 #define S_FATAL		"FATAL "
 
-const static char e_format[] = S_FATAL "fail to format logger string[%s]\n";
+static const char e_format[] = S_FATAL "fail to format logger string[%s]\n";
 
 void
 _vprintf(const char *prefix, size_t prelen, const char *fmt, va_list args) {
