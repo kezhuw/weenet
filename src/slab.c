@@ -35,13 +35,13 @@ struct slab {
 };
 
 struct slab *
-slab_new(size_t piecesize, size_t npieces) {
+slab_new(size_t npieces, size_t piecesize) {
 	assert(piecesize >= sizeof(void *));
 	assert(npieces > 0);
 	size_t blocksize = piecesize * npieces;
 	struct slab *sa = wmalloc(sizeof(*sa) + blocksize);
 
-	sa->blocksize = sizeof(struct block) + blocksize;
+	sa->blocksize = blocksize;
 	sa->piecesize = piecesize;
 
 	sa->nblocks = 1;
