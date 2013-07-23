@@ -1,3 +1,4 @@
+#define _BSD_SOURCE
 #include "event.h"
 #include "config.h"
 #include "logger.h"
@@ -5,6 +6,7 @@
 #include "process.h"
 #include "service.h"
 #include "schedule.h"
+#include "timer.h"
 
 #include <lua.h>
 #include <lualib.h>
@@ -146,6 +148,11 @@ main(int argc, const char *argv[]) {
 	size_t num = 0;
 	struct service *services = _get_services(L, &num);
 
+	if (weenet_init_time() != 0) {
+		fprintf(stderr, "fail to init time module.\n");
+		exit(-1);
+	}
+
 	if (weenet_init_scheduler(threads) != 0) {
 		fprintf(stderr, "fail to start scheduler.\n");
 		exit(-1);
@@ -181,7 +188,8 @@ main(int argc, const char *argv[]) {
 	}
 
 	for (;;) {
-		sleep(100000);
+		weenet_time_update();
+		usleep(1000);
 	}
 
 	return 0;

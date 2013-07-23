@@ -5,9 +5,20 @@
 
 #include <stdint.h>
 
-void weenet_timer_boot();
+// Millisecond resolution.
 
-uint64_t weenet_timer_now();
-void weenet_timer_timeout(process_t pid, session_t sid, uint64_t msecs);
+
+uint64_t weenet_time_now();
+
+// Return timestamp when weenet_init_time() called.
+uint64_t weenet_time_starttime();
+
+void weenet_time_timeout(process_t pid, session_t sid, uint64_t msecs);
+
+
+int weenet_init_time();
+
+// Called by time update thread.
+void weenet_time_update();
 
 #endif

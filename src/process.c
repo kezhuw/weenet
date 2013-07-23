@@ -676,7 +676,7 @@ session_t
 weenet_process_timeo(struct weenet_process *p, uint64_t msecs) {
 	session_t pid = weenet_process_self(p);
 	session_t sid = weenet_process_sid(p);
-	weenet_timer_timeout(pid, sid, msecs);
+	weenet_time_timeout(pid, sid, msecs);
 	return sid;
 }
 
