@@ -101,7 +101,7 @@ int weenet_message_gc(uint32_t id, void *ud, resource_fini_t fn);
 // Take the ownership of the resource.
 void weenet_message_take(struct weenet_message *msg);
 
-void weenet_message_ref(struct weenet_message *msg);
+struct weenet_message *weenet_message_ref(struct weenet_message *msg);
 void weenet_message_copy(struct weenet_message *msg, int n);
 void weenet_message_unref(struct weenet_message *msg);
 

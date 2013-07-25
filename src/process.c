@@ -150,9 +150,10 @@ weenet_message_take(struct weenet_message *msg) {
 	msg->tags |= WMESSAGE_FLAG_MIGRATED;
 }
 
-void
+struct weenet_message *
 weenet_message_ref(struct weenet_message *msg) {
 	weenet_atomic_inc(&msg->refcnt);
+	return msg;
 }
 
 void
