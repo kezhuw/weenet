@@ -285,6 +285,11 @@ weenet_mailbox_expand(struct weenet_mailbox *b) {
 	b->size = newsize;
 }
 
+inline static void
+weenet_mailbox_init(struct weenet_mailbox *b) {
+	b->active = true;
+}
+
 inline static uint32_t
 weenet_mailbox_num(struct weenet_mailbox *b) {
 	return b->num;
@@ -487,13 +492,17 @@ weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 	p->refcnt = 1;	// Two? One for new, one for all monitors?
 	p->id = weenet_account_enroll(p);
 	p->name = weenet_atom_new(name, strlen(name));
+	weenet_mailbox_init(&p->mailbox);
 	p->service = weenet_service_new(p->name, p, data, meta);
 	if (p->service == NULL) {
 		fprintf(stderr, "failed to start new process [%s].\n", name);
+		p->retired = true;
+		weenet_monitor_retire(&p->supervisors, p);
 		weenet_process_release(p);
-		weenet_process_retire(p);
+		weenet_process_release(p);
 		return NULL;
 	}
+	weenet_schedule_resume(p);
 	return p;
 }
 
