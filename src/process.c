@@ -58,6 +58,9 @@ struct weenet_process {
 	struct weenet_monitor supervisees;	// processes that this process monitoring
 };
 
+#define _self(p)	((p)->id)
+#define _name(p)	((p)->name->str)
+
 static /*__thread*/ struct slab *process_slab;
 static struct slab *message_slab;
 
@@ -552,7 +555,12 @@ weenet_process_sid(struct weenet_process *p) {
 
 process_t
 weenet_process_self(const struct weenet_process *p) {
-	return p->id;
+	return _self(p);
+}
+
+const char *
+weenet_process_name(const struct weenet_process *p) {
+	return _name(p);
 }
 
 session_t
