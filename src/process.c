@@ -503,6 +503,8 @@ weenet_account_unregister(struct weenet_atom *name) {
 	return true;
 }
 
+static bool weenet_process_work(struct weenet_process *p);
+
 struct weenet_process *
 weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 	struct weenet_process *p = weenet_process_calloc();
@@ -519,7 +521,9 @@ weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 		weenet_process_release(p);
 		return NULL;
 	}
-	weenet_schedule_resume(p);
+	if (weenet_process_work(p)) {
+		weenet_schedule_resume(p);
+	}
 	return p;
 }
 
