@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 struct worker {
 	struct {
@@ -27,7 +28,19 @@ struct schedule {
 static struct schedule *S;
 
 static void
-_push(struct schedule *s, struct weenet_process *p) {
+_push(struct worker *w, struct weenet_process *p) {
+	struct iovec v[2];
+	struct bpipe *pipe = w->pipe;
+	weenet_atomic_lock(&w->lock.write);
+	bpipe_writev(pipe, v);
+	*((struct weenet_process **)v[0].iov_base) = p;
+	bpipe_writen(pipe, sizeof(struct weenet_process *));
+	weenet_atomic_unlock(&w->lock.write);
+}
+
+static void
+_resume(struct schedule *s, struct weenet_process *p, bool resume) {
+	(void)resume;
 // Clang supports GCC’s pragma for compatibility with existing source code,
 // as well as several extensions.
 #pragma GCC diagnostic push
@@ -37,14 +50,8 @@ _push(struct schedule *s, struct weenet_process *p) {
 #pragma GCC diagnostic pop
 	hash >>= 3;
 	struct worker *w = s->workers + hash%s->nworker;
-
-	struct iovec v[2];
-	struct bpipe *pipe = w->pipe;
-	weenet_atomic_lock(&w->lock.write);
-	bpipe_writev(pipe, v);
-	*((struct weenet_process **)v[0].iov_base) = p;
-	bpipe_writen(pipe, sizeof(struct weenet_process *));
-	weenet_atomic_unlock(&w->lock.write);
+	weenet_process_retain(p);
+	_push(w, p);
 }
 
 static void *
@@ -59,7 +66,7 @@ _work(void *arg) {
 			while (ptr < end) {
 				struct weenet_process *p = *ptr++;
 				if (weenet_process_resume(p)) {
-					weenet_schedule_resume(p);
+					_resume(S, p, false);
 				}
 				// Retained by resume.
 				weenet_process_release(p);	
@@ -88,6 +95,5 @@ weenet_init_scheduler(size_t nthread) {
 
 void
 weenet_schedule_resume(struct weenet_process *p) {
-	weenet_process_retain(p);
-	_push(S, p);
+	_resume(S, p, true);
 }
