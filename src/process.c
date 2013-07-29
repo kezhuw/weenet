@@ -390,10 +390,13 @@ struct weenet_account {
 	int64_t lock;
 	struct {
 		int64_t number;
-		intptr_t first;
-		intptr_t last;
+		intreg_t first;
+		intreg_t last;
 	} free;
-	struct weenet_process **processes;
+	struct {
+		struct weenet_process *proc;
+		intreg_t next;
+	} *slot;
 };
 
 void weenet_process_retire(struct weenet_process *p);
@@ -406,25 +409,25 @@ weenet_account_enroll(struct weenet_process *p) {
 	struct weenet_account *t = T;
 	weenet_atomic_lock(&t->lock);
 	if (t->len == t->size) {
-		if (t->free.first != 0) {
-			process_t pid = (process_t)t->free.first;
-			t->free.first = (intptr_t)t->processes[pid];
-			--t->free.number;
-			t->processes[pid] = p;
+		intreg_t index = t->free.first;
+		if (index != -1) {
+			assert(t->slot[index].proc == NULL);
+			t->free.first = t->slot[index].next;
+			t->slot[index].proc = p;
 			weenet_atomic_unlock(&t->lock);
-			return pid;
+			return (process_t)index;
 		} else {
 			size_t size = t->size;
 			size += size/2+1;
-			t->processes = wrealloc(t->processes, size*sizeof(struct weenet_process*));
+			t->slot = wrealloc(t->slot, size * sizeof(t->slot[0]));
 			t->size = size;
 		}
 	}
 	assert(t->len < t->size);
-	process_t pid = (process_t)++t->len;
-	t->processes[pid] = p;
+	size_t index = ++t->len;
+	t->slot[index].proc = p;
 	weenet_atomic_unlock(&t->lock);
-	return pid;
+	return (process_t)index;
 }
 
 static void
@@ -432,21 +435,21 @@ weenet_account_unlink(process_t pid) {
 	if (pid == PROCESS_ZERO) return;
 	struct weenet_account *t = T;
 	weenet_atomic_lock(&t->lock);
-	assert((size_t)pid <= t->len);
-	if (t->processes[pid] == NULL) {
+	intreg_t index = (intreg_t)pid;
+	assert((size_t)index <= t->len);
+	if (t->slot[index].proc == NULL) {
 		weenet_atomic_unlock(&t->lock);
 		return;
 	}
-	// FIXME another storage to store free-list info.
-	if (t->free.first == 0) {
-		t->free.first = t->free.last = (intptr_t)pid;
+	t->slot[index].proc = NULL;
+	t->slot[index].next = -1;
+	if (t->free.first == -1) {
+		t->free.first = t->free.last = index;
 	} else {
-		assert((intptr_t)t->processes[t->free.last] == 0);
-		t->free.last = (intptr_t)pid;
+		assert(t->slot[t->free.last].next == -1);
+		t->slot[t->free.last].next = index;
+		t->free.last = index;
 	}
-	++t->free.number;
-	t->free.last = (intptr_t)pid;
-	t->processes[pid] = (void *)(intptr_t)(0);
 	weenet_atomic_unlock(&t->lock);
 }
 
@@ -454,10 +457,17 @@ struct weenet_process *
 weenet_account_retain(process_t pid) {
 	struct weenet_account *t = T;
 	weenet_atomic_lock(&t->lock);
-	struct weenet_process *p = t->processes[pid];
-	if (p != NULL) {
+	assert((size_t)pid <= t->len);
+	struct weenet_process *p = t->slot[pid].proc;
+	if (p != NULL && p->refcnt != 0) {
 		// retained under lock
-		weenet_process_retain(p);
+		int32_t refcnt = weenet_atomic_add(&p->refcnt, 1);
+		if (refcnt == 1) {
+			// Someone just released it, about to delete it.
+			weenet_atomic_sub(&p->refcnt, 1);
+			weenet_atomic_unlock(&t->lock);
+			return NULL;
+		}
 	}
 	weenet_atomic_unlock(&t->lock);
 	return p;
@@ -515,6 +525,7 @@ weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 
 static void
 weenet_process_delete(struct weenet_process *p) {
+	weenet_account_unlink(p->id);
 	assert(weenet_atomic_get(&p->refcnt) == 0);
 	if (p->service != NULL) {
 		weenet_service_delete(p->service, p);
@@ -553,7 +564,6 @@ weenet_process_release(struct weenet_process *p) {
 			weenet_logger_fatalf("process[%ld name(%s)] unexpected terminated.\n",
 				(long)p->id, weenet_atom_str(p->name));
 		}
-		weenet_account_unlink(p->id);
 		weenet_process_delete(p);
 		return true;
 	}
@@ -755,7 +765,9 @@ weenet_init_process() {
 	weenet_message_gc(WMESSAGE_RIDX_RAWMEM, NULL, _rawmem_resource_release);
 	weenet_message_gc(WMESSAGE_RIDX_MEMORY, NULL, _memory_resource_release);
 	T = wcalloc(sizeof(*T));
+	T->free.first = -1;
 	T->size = 65536;
-	T->processes = wmalloc(T->size * sizeof(struct weenet_process *));
+	T->slot = wmalloc(T->size * sizeof(T->slot[0]));
+	T->slot[0].proc = NULL;
 	return 0;
 }
