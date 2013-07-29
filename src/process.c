@@ -33,7 +33,7 @@ struct weenet_mailbox {
 struct weenet_monitor {
 	uint32_t num;
 	uint32_t len;
-	struct {
+	struct _monitor {
 		monitor_t mref;
 		struct weenet_process *proc;
 	} *monitors;
@@ -175,17 +175,23 @@ weenet_message_unref(struct weenet_message *msg) {
 
 static void
 weenet_monitor_retire(struct weenet_monitor *m, struct weenet_process *p) {
-	uint32_t n = m->num;
-	if (n != 0) {
-		weenet_atomic_add(&p->refcnt, (int32_t)n);
-		process_t self = p->id;
-		for (uint32_t i=0; i<n; ++i) {
-			weenet_process_push(m->monitors[i].proc, self, 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)p, m->monitors[i].mref);
-		}
-	}
-	wfree(m->monitors);
+	// 'p' is retired, _monitor()/_demonitor() don't modify process's supervisors.
+	uintreg_t n = (uintreg_t)m->num;
+	struct _monitor *monitors = m->monitors;
 	m->monitors = NULL;
 	m->num = m->len = 0;
+	if (n != 0) {
+		weenet_atomic_add(&p->refcnt, (int32_t)n);
+		process_t self = _self(p);
+		for (uintreg_t i=0; i<n; ++i) {
+			struct weenet_process *dst = monitors[i].proc;
+			weenet_process_push(dst, self, 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)p, monitors[i].mref);
+			weenet_process_release(dst);
+		}
+	}
+	if (monitors != NULL) {
+		wfree(monitors);
+	}
 }
 
 static void
@@ -220,6 +226,7 @@ weenet_monitor_remove(struct weenet_monitor *m, uintreg_t mref, struct weenet_pr
 	} else {
 		for (uint32_t i=0; i<=last; ++i) {
 			if (m->monitors[i].mref == mref && m->monitors[i].proc == proc) {
+				weenet_process_release(proc);
 				if (i != last) {
 					m->monitors[i].mref = m->monitors[last].mref;
 					m->monitors[i].proc = m->monitors[last].proc;
@@ -715,6 +722,9 @@ weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
 	weenet_atomic_lock(&dst->lock);
 	retired = dst->retired;
 	if (!retired) {
+		// TODO in _insert() ?
+		// Ensure backward reference is invalid.
+		weenet_process_retain(p);
 		// XXX take a reference ?
 		// Semantics of this API requires retained 'dst',
 		// but the implementation seems not.
