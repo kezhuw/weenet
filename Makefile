@@ -2,8 +2,11 @@ NAME = weenet
 
 default : debug
 
-debug : CFLAGS += -g -O0 -fsanitize=address -fno-omit-frame-pointer
+debug : CFLAGS += -g -O0
 debug : normal
+
+asan : CFLAGS += -fsanitize=address -fno-omit-frame-pointer
+asan : debug
 
 release : CFLAGS += -g -O2
 release : normal
@@ -13,7 +16,7 @@ release0 : normal
 
 CC = clang
 CFLAGS = -std=c99 -Wall -Wextra -Wconversion
-LDFLAGS = -lpthread -llua -ldl
+LDFLAGS = -lpthread -llua -ldl -rdynamic
 
 PREFIX = /usr/local
 INSTALL_ETC = $(PREFIX)/etc
@@ -44,7 +47,7 @@ SRCS = atom.c event.c logger.c pipe.c memory.c process.c service.c slab.c main.c
 
 $(WEENET_BIN) : $(addprefix src/, $(SRCS)) | $(BUILD)
 	@echo "Building weenet ..."
-	$(CC) $(CFLAGS) $(LDFLAGS) -Wl,-E $^ -o $@
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
 	@echo "Done"
 	@echo
 

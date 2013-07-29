@@ -1,7 +1,10 @@
 default : debug
 
-debug : CFLAGS += -g -O0 -fsanitize=address -fno-omit-frame-pointer
+debug : CFLAGS += -g -O0
 debug : normal
+
+asan : CFLAGS += -fsanitize=address -fno-omit-frame-pointer
+asan : debug
 
 release : CFLAGS += -g -O2
 release : normal
