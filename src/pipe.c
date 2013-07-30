@@ -154,6 +154,7 @@ spipe_cwake(struct spipe *s) {
 	assert(s->wbeg != s->wpos);
 	if (!__sync_bool_compare_and_swap(&s->guard, s->wbeg, s->wpos)) {
 		s->guard = s->wbeg = s->wpos;
+		__sync_synchronize();
 		return true;
 	}
 	s->wbeg = s->wpos;
@@ -184,30 +185,29 @@ spipe_readn(struct spipe *s, size_t n) {
 	__sync_sub_and_fetch(&s->writesize, n);
 }
 
-static inline char *
-spipe_guard(struct spipe *s) {
-	return __sync_val_compare_and_swap(&s->guard, s->rpos, NULL);
-}
-
 size_t
 spipe_readv(struct spipe * restrict s, struct iovec v[2]) {
-	char *guard = spipe_guard(s);
-	if (guard == s->rpos || guard == GUARD_INVAL) {
+	// fetch before cas, writer may adjust 'rpos'
+	// when 'guard' set to NULL.
+	char *rpos = s->rpos;
+	char *guard = __sync_val_compare_and_swap(&s->guard, rpos, NULL);
+	assert(guard != NULL);
+	if (guard == rpos || guard == GUARD_INVAL) {
 		return 0;
 	}
 	char *cend = (char*)s->first + s->chunksize;
-	if (guard > s->rpos && guard < cend) {
+	if (guard > rpos && guard < cend) {
 		// reader/writer in same chunk
-		size_t len = (size_t)(guard - s->rpos);
-		v[0].iov_base = s->rpos;
+		size_t len = (size_t)(guard - rpos);
+		v[0].iov_base = rpos;
 		v[0].iov_len = len;
 		v[1].iov_base = NULL;
 		v[1].iov_len = 0;
 		return len;
 	}
 	assert(guard != cend);
-	size_t l0 = (size_t)(cend - s->rpos);
-	v[0].iov_base = s->rpos;
+	size_t l0 = (size_t)(cend - rpos);
+	v[0].iov_base = rpos;
 	v[0].iov_len = l0;
 	struct data *d1 = s->first->next;
 	if (guard >= (char*)d1 && guard <= (char*)d1+s->chunksize) {
