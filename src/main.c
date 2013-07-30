@@ -8,9 +8,9 @@
 #include "schedule.h"
 #include "timer.h"
 
-#include <lua.h>
-#include <lualib.h>
-#include <lauxlib.h>
+#include <lua5.2/lua.h>
+#include <lua5.2/lualib.h>
+#include <lua5.2/lauxlib.h>
 
 #include <stdio.h>
 #include <assert.h>

@@ -16,7 +16,7 @@ release0 : normal
 
 CC = clang
 CFLAGS = -std=c99 -Wall -Wextra -Wconversion
-LDFLAGS = -lpthread -llua -ldl -rdynamic
+LDFLAGS = -lpthread -llua5.2 -ldl -rdynamic
 
 PREFIX = /usr/local
 INSTALL_ETC = $(PREFIX)/etc
