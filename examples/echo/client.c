@@ -33,9 +33,8 @@ client_handle(struct client *e, struct weenet_process *p, struct weenet_message 
 	case WMESSAGE_TYPE_CLIENT:
 		;size_t size = (size_t)m->meta;
 		if (size == 0) {
-			weenet_process_retire(e->agent);
 			weenet_process_retire(p);
-		} else {
+		} else if (e->agent != NULL) {
 			void *dup = wmalloc(size);
 			memcpy(dup, (void*)m->data, size);
 			weenet_process_push(e->agent, weenet_process_self(p), 0, WMESSAGE_TYPE_CLIENT|WMESSAGE_RIDX_MEMORY, (uintptr_t)dup, (uintptr_t)size);

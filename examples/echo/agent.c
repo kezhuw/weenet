@@ -57,6 +57,8 @@ agent_new(struct weenet_process *p, uintptr_t data) {
 
 static void
 agent_delete(struct agent *g) {
+	weenet_event_monitor(g->self, 0, g->fd, WEVENT_DELETE, WEVENT_READ);
+	weenet_event_monitor(g->self, 0, g->fd, WEVENT_DELETE, WEVENT_WRITE);
 	close(g->fd);
 	wfree(g);
 }
@@ -87,7 +89,8 @@ agent_handle(struct agent *g, struct weenet_process *p, struct weenet_message *m
 		weenet_process_retire(p);	// retire gate self
 		break;
 	case WMESSAGE_TYPE_EVENT:
-		;uintreg_t event = (uintreg_t)m->meta;
+		if (g->client == NULL) break;
+		uintreg_t event = (uintreg_t)m->meta;
 		switch (event) {
 		case WEVENT_READ:
 			;size_t n = 0;
