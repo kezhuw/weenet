@@ -253,7 +253,7 @@ spipe_writen(struct spipe *s, size_t n) {
 
 size_t
 spipe_writev(struct spipe *s, struct iovec v[2]) {
-	if (s->first == NULL) {
+	if (s->write == NULL) {
 		s->write = wmalloc(s->chunksize);
 		s->first = wmalloc(s->chunksize);
 		s->first->next = s->write;
