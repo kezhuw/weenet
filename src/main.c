@@ -17,6 +17,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+
 #include <unistd.h>
 
 struct service {
@@ -98,8 +100,15 @@ error:
 	return services;
 }
 
+static void
+_set_sig_handlers() {
+	signal(SIGPIPE, SIG_IGN);
+}
+
 int
 main(int argc, const char *argv[]) {
+	_set_sig_handlers();
+
 	const char *config_file = WEENET_DEFAULT_CONFIG_FILE;
 	if (argc >= 3) {
 		if (strcmp(argv[1], "-c") != 0) {
