@@ -132,11 +132,9 @@ _poll(void *arg) {
 			}
 			_unlock_data(d);
 			if (read.source != 0) {
-				fprintf(stderr, "fd[%d] is readable\n", fd);
 				weenet_process_send(read.source, 0, read.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, (uintptr_t)fd, WEVENT_READ);
 			}
 			if (write.source != 0) {
-				fprintf(stderr, "fd[%d] is writable\n", fd);
 				weenet_process_send(write.source, 0, write.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, (uintptr_t)fd, WEVENT_WRITE);
 			}
 		}
@@ -185,6 +183,13 @@ int
 weenet_event_monitor(process_t source, session_t session, int fd, int op, int event) {
 	if (source == 0) return EINVAL;
 
+	if (_mask(event) != WEVENT_READ && _mask(event) != WEVENT_WRITE) {
+		return EINVAL;
+	}
+	if (op != WEVENT_ADD && op != WEVENT_ENABLE && op != WEVENT_DELETE) {
+		return EINVAL;
+	}
+
 	struct event *e = E;
 	_lock_event(e);
 	if ((size_t)fd >= e->size) {
@@ -208,13 +213,6 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 		e->max = fd;
 	}
 	_unlock_event(e);
-
-	if (_mask(event) != WEVENT_READ && _mask(event) != WEVENT_WRITE) {
-		return EINVAL;
-	}
-	if (op != WEVENT_ADD && op != WEVENT_ENABLE && op != WEVENT_DELETE) {
-		return EINVAL;
-	}
 
 	int epfd = e->epfd;
 	struct epoll_event ev;
