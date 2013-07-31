@@ -12,14 +12,18 @@
 #include <lua5.2/lualib.h>
 #include <lua5.2/lauxlib.h>
 
+#include <errno.h>
 #include <stdio.h>
 #include <assert.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 
 #include <unistd.h>
+
+#include <sys/resource.h>
 
 struct service {
 	const char *name;
@@ -105,6 +109,25 @@ _set_sig_handlers() {
 	signal(SIGPIPE, SIG_IGN);
 }
 
+static void
+_set_open_files_limit(int max) {
+	rlim_t maxfiles = (rlim_t)(max+1024);
+	struct rlimit limit;
+	if (getrlimit(RLIMIT_NOFILE, &limit) < 0) {
+		perror("getrlimit(RLIMIT_NOFILE)");
+		exit(1);
+	}
+	if (limit.rlim_cur < maxfiles) {
+		struct rlimit expected;
+		expected.rlim_cur = maxfiles;
+		expected.rlim_max = maxfiles;
+		if (setrlimit(RLIMIT_NOFILE, &expected) < 0) {
+			fprintf(stderr, "setrlimit(RLIMIT_NOFILE, %ld) failed(%s), current rlimit{.cur = %ld, .max = %ld}\n", (long)maxfiles, strerror(errno), (long)limit.rlim_cur, (long)limit.rlim_max);
+			exit(1);
+		}
+	}
+}
+
 int
 main(int argc, const char *argv[]) {
 	_set_sig_handlers();
@@ -125,6 +148,22 @@ main(int argc, const char *argv[]) {
 		fprintf(stderr, "parse config[%s] failed[%s].\n", config_file, lua_tostring(L, -1));
 		return -1;
 	}
+
+	int max_open_files = WEENET_MAX_OPEN_FILES;
+	lua_getglobal(L, "max_open_files");
+	if (lua_type(L, -1) != LUA_TNIL) {
+		int isnum;
+		max_open_files = (int)lua_tointegerx(L, -1, &isnum);
+		if (!isnum) {
+			fprintf(stderr, "max_open_files expect a number, got %s.\n", luaL_typename(L, -1));
+			return -1;
+		}
+		if (max_open_files < 1024) {
+			fprintf(stderr, "max_open_files[%d] smaller than 1024.\n", max_open_files);
+		}
+	}
+	lua_pop(L, 1);
+	_set_open_files_limit(max_open_files);
 
 	size_t threads = WEENET_DEFAULT_THREADS;
 	lua_getglobal(L, "threads");
