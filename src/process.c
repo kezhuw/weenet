@@ -90,18 +90,6 @@ _process_resource_release(void *ud, uintptr_t data, uintptr_t meta) {
 	weenet_process_release(p);
 }
 
-struct weenet_process *
-weenet_process_calloc() {
-	struct weenet_process *p = slab_retain(process_slab);
-	memzero(p, sizeof(*p));
-	return p;
-}
-
-void
-weenet_process_free(struct weenet_process *p) {
-	slab_release(process_slab, p);
-}
-
 static struct {
 	struct {
 		void *ud;
@@ -503,16 +491,29 @@ weenet_account_unregister(struct weenet_atom *name) {
 	return true;
 }
 
+static struct weenet_process *
+_process_new(struct weenet_atom *atom) {
+	struct weenet_process *p = slab_retain(process_slab);
+	memzero(p, sizeof(*p));
+	p->name = atom;
+	p->refcnt = 1;
+	weenet_mailbox_init(&p->mailbox);
+	return p;
+}
+
+static void
+_process_delete(struct weenet_process *p) {
+	slab_release(process_slab, p);
+}
+
 static bool weenet_process_work(struct weenet_process *p);
 
 struct weenet_process *
 weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
-	struct weenet_process *p = weenet_process_calloc();
-	p->refcnt = 1;	// Two? One for new, one for all monitors?
+	struct weenet_atom *atom = weenet_atom_new(name, strlen(name));
+	struct weenet_process *p = _process_new(atom);
 	p->id = weenet_account_enroll(p);
-	p->name = weenet_atom_new(name, strlen(name));
-	weenet_mailbox_init(&p->mailbox);
-	p->service = weenet_service_new(p->name, p, data, meta);
+	p->service = weenet_service_new(atom, p, data, meta);
 	if (p->service == NULL) {
 		fprintf(stderr, "failed to start new process [%s].\n", name);
 		p->retired = true;
@@ -536,7 +537,7 @@ weenet_process_delete(struct weenet_process *p) {
 	}
 	weenet_monitor_unlink(&p->supervisees, p);
 	weenet_mailbox_cleanup(&p->mailbox);
-	weenet_process_free(p);
+	_process_delete(p);
 }
 
 void
@@ -566,7 +567,7 @@ weenet_process_release(struct weenet_process *p) {
 	if (ref == 0) {
 		if (!p->retired) {
 			weenet_logger_fatalf("process[%ld name(%s)] unexpected terminated.\n",
-				(long)p->id, weenet_atom_str(p->name));
+				(long)p->id, p->name->str);
 		}
 		weenet_process_delete(p);
 		return true;
