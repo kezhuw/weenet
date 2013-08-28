@@ -46,7 +46,7 @@ struct weenet_process {
 		process_t source;
 		session_t session;
 	} wait;
-	struct weenet_atom *name;
+	const char *name;
 	struct weenet_service *service;
 	struct weenet_mailbox mailbox;
 
@@ -59,7 +59,7 @@ struct weenet_process {
 };
 
 #define _self(p)	((p)->id)
-#define _name(p)	((p)->name->str)
+#define _name(p)	((p)->name)
 
 static /*__thread*/ struct slab *process_slab;
 static struct slab *message_slab;
@@ -491,11 +491,12 @@ weenet_account_unregister(struct weenet_atom *name) {
 	return true;
 }
 
+// Emphasize that the name is an atom, so it is safe to use without worrying its lifetime.
 static struct weenet_process *
 _process_new(struct weenet_atom *atom) {
 	struct weenet_process *p = slab_retain(process_slab);
 	memzero(p, sizeof(*p));
-	p->name = atom;
+	p->name = weenet_atom_str(atom);
 	p->refcnt = 1;
 	weenet_mailbox_init(&p->mailbox);
 	return p;
@@ -567,7 +568,7 @@ weenet_process_release(struct weenet_process *p) {
 	if (ref == 0) {
 		if (!p->retired) {
 			weenet_logger_fatalf("process[%ld name(%s)] unexpected terminated.\n",
-				(long)p->id, p->name->str);
+				(long)p->id, p->name);
 		}
 		weenet_process_delete(p);
 		return true;
