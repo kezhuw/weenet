@@ -447,7 +447,11 @@ weenet_account_retain(process_t pid) {
 	weenet_atomic_lock(&t->lock);
 	assert((size_t)pid <= t->len);
 	struct weenet_process *p = t->slot[pid].proc;
-	if (p != NULL && p->refcnt != 0) {
+	if (p != NULL) {
+		if (p->refcnt == 0) {
+			weenet_atomic_unlock(&t->lock);
+			return NULL;
+		}
 		// retained under lock
 		int32_t refcnt = weenet_atomic_add(&p->refcnt, 1);
 		if (refcnt == 1) {
