@@ -27,6 +27,6 @@ $(LIBS) : %.so : %.c
 	$(CC) $(CFLAGS) $^ -o $@ -I../../src/
 
 clean :
-	-rm $(LIBS)
+	rm -f $(LIBS)
 
 .PHONY : default normal debug release release0 clean
