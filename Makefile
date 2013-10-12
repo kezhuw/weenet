@@ -18,6 +18,10 @@ CC = clang
 CFLAGS = -std=c99 -Wall -Wextra -Wconversion
 LDFLAGS = -lpthread -llua5.2 -ldl -rdynamic
 
+include compat.mk
+
+CFLAGS += $(MACROS)
+
 PREFIX = /usr/local
 INSTALL_ETC = $(PREFIX)/etc
 INSTALL_BIN = $(PREFIX)/bin
@@ -36,14 +40,14 @@ WEENET_CONF = etc/weenet.conf
 SERVICES_DIR = $(BUILD)/services
 SERVICES_BIN = $(addprefix $(SERVICES_DIR)/, $(addsuffix .so, $(SERVICES)))
 
-INCS = weenet.h atom.h atomic.h event.h timer.h types.h logger.h memory.h process.h service.h
+INCS = weenet.h atom.h atomic.h compat.h event.h timer.h types.h logger.h memory.h process.h service.h
 HEADERS = $(addprefix src/, $(INCS))
 
 define SERVICE_SRC
 $(addprefix src/services/, $(addprefix $1/, $(addsuffix .c, $1)))
 endef
 
-SRCS = atom.c event.c logger.c pipe.c memory.c process.c service.c slab.c main.c schedule.c timer.c
+SRCS = atom.c compat.c event.c logger.c pipe.c memory.c process.c service.c slab.c main.c schedule.c timer.c
 
 $(WEENET_BIN) : $(addprefix src/, $(SRCS)) | $(BUILD)
 	@echo "Building weenet ..."
@@ -58,7 +62,7 @@ $(WEENET_BIN) : $(addprefix src/, $(SRCS)) | $(BUILD)
 .SECONDEXPANSION:
 $(SERVICES_BIN) : build/services/%.so : $$(call SERVICE_SRC, %)
 	@echo "Building service: $*"
-	$(CC) $(CFLAGS) -shared -fPIC $^ -o $@ -Isrc
+	$(CC) $(CFLAGS) $(SHARED) $^ -o $@ -Isrc
 	@echo "Done"
 	@echo
 

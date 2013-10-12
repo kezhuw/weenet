@@ -319,7 +319,7 @@ done:
 	return err;
 }
 
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined(__APPLE__)
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>

@@ -1,5 +1,3 @@
-#define _BSD_SOURCE
-
 #include "atom.h"
 #include "atomic.h"
 #include "config.h"

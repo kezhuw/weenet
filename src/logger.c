@@ -1,5 +1,3 @@
-#define _POSIX_SOURCE
-
 #include "atomic.h"
 #include "logger.h"
 #include "memory.h"
