@@ -1,4 +1,3 @@
-#define _BSD_SOURCE
 #include "event.h"
 #include "config.h"
 #include "logger.h"

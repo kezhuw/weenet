@@ -1,5 +1,3 @@
-#define _POSIX_SOURCE	// for getnameinfo family (in c99 mode ?)
-#define _BSD_SOURCE	// NI_MAXHOST/NI_MAXSERV need this under _POSIX_SOURCE
 #include <errno.h>
 #include <stdio.h>
 #include <stddef.h>

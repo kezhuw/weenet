@@ -1,11 +1,10 @@
-#define _GNU_SOURCE	// for memrchr
-
 #include "event.h"
 #include "logger.h"
 #include "memory.h"
 #include "process.h"
 #include "service.h"
 #include "utils.h"
+#include "compat.h"
 
 #include <sys/types.h>
 #include <sys/ioctl.h>

@@ -1,5 +1,3 @@
-#define _BSD_SOURCE
-
 #include "timer.h"
 #include "memory.h"
 #include "process.h"

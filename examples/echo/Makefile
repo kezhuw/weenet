@@ -1,3 +1,5 @@
+include ../../compat.mk
+
 default : debug
 
 debug : CFLAGS += -g -O0
@@ -13,7 +15,7 @@ release0 : CFLAGS += -O3
 release0 : normal
 
 CC = clang
-CFLAGS = -std=c99 -Wall -Wextra -Wconversion -shared -fPIC
+CFLAGS = -std=c99 -Wall -Wextra -Wconversion $(MACROS) $(SHARED)
 
 SERVICES = gate agent client
 
