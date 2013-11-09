@@ -9,3 +9,7 @@ ifeq ($(PLATFORM), Darwin)
 else
 	SHARED = -fPIC -shared
 endif
+
+ifneq ($(PLATFORM), FreeBSD)
+	LDFLAGS += -ldl
+endif
