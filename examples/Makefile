@@ -1,9 +1,9 @@
 default : all
 
 all :
-	cd echo; make
+	cd echo; $(MAKE)
 
 clean :
-	cd echo; make clean
+	cd echo; $(MAKE) clean
 
 .PHONY : default all clean
