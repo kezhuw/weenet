@@ -39,13 +39,12 @@ static struct fixed_block {
 struct storage {
 	char *seq;
 	char *end;
-	struct block *last;
 	struct block *first;
 };
 
 static struct storage G = {
 	FIRST.bytes, FIRST.bytes + BLOCK_SIZE,
-	(struct block *)&FIRST, (struct block *)&FIRST
+	(struct block *)&FIRST
 };
 
 static struct atom *
@@ -83,9 +82,8 @@ _alloc(struct storage *g, size_t len) {
 		return (struct atom *)b->bytes;
 	} else if (g->seq + size > g->end) {
 		struct block *b = wmalloc(sizeof(*b) + BLOCK_SIZE);
-		b->next = g->last->next;
-		g->last->next = b;
-		g->last = b;
+		b->next = g->first;
+		g->first = b;
 		g->seq = b->bytes;
 		g->end = b->bytes + BLOCK_SIZE;
 	}
