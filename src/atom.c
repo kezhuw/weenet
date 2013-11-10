@@ -53,7 +53,7 @@ _search(struct set *s, uint32_t h, const char *str, size_t len) {
 	size_t i =  h % SET_SIZE;
 	struct atom *a = s->nodes[i];
 	while (a != NULL) {
-		if (a->str == str || (h == a->hash && len == (size_t)len && memcmp(a->str, str, len) == 0)) {
+		if (a->str == str || (h == a->hash && len == (size_t)a->len && memcmp(a->str, str, len) == 0)) {
 			return a;
 		}
 		a = a->link;
