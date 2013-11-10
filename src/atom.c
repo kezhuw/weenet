@@ -39,13 +39,12 @@ static struct fixed_block {
 struct storage {
 	char *seq;
 	char *end;
-	struct block *last;
 	struct block *first;
 };
 
 static struct storage G = {
 	FIRST.bytes, FIRST.bytes + BLOCK_SIZE,
-	(struct block *)&FIRST, (struct block *)&FIRST
+	(struct block *)&FIRST
 };
 
 static struct atom *
@@ -53,7 +52,7 @@ _search(struct set *s, uint32_t h, const char *str, size_t len) {
 	size_t i =  h % SET_SIZE;
 	struct atom *a = s->nodes[i];
 	while (a != NULL) {
-		if (a->str == str || (h == a->hash && len == (size_t)len && memcmp(a->str, str, len) == 0)) {
+		if (a->str == str || (h == a->hash && len == (size_t)a->len && memcmp(a->str, str, len) == 0)) {
 			return a;
 		}
 		a = a->link;
@@ -73,18 +72,18 @@ _insert(struct set *s, struct atom *a) {
 
 static struct atom *
 _alloc(struct storage *g, size_t len) {
-	size_t size = sizeof(struct atom) + len + 1;
+	size_t size = sizeof(struct atom) + len;
 	size = aligned(size);
 	if (size >= BLOCK_SIZE) {
 		// XXX assertion failure ?!
 		struct block *b = wmalloc(sizeof(*b) + size);
 		b->next = g->first->next;
 		g->first->next = b;
+		return (struct atom *)b->bytes;
 	} else if (g->seq + size > g->end) {
 		struct block *b = wmalloc(sizeof(*b) + BLOCK_SIZE);
-		b->next = g->last->next;
-		g->last->next = b;
-		g->last = b;
+		b->next = g->first;
+		g->first = b;
 		g->seq = b->bytes;
 		g->end = b->bytes + BLOCK_SIZE;
 	}
@@ -96,7 +95,7 @@ _alloc(struct storage *g, size_t len) {
 
 static struct atom *
 _new(struct storage *g, uint32_t h, const char *str, size_t len) {
-	struct atom *a = _alloc(g, len);
+	struct atom *a = _alloc(g, len+1);
 	a->len = (uint32_t)len;
 	a->hash = h;
 	memcpy(a->str, str, len);
