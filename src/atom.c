@@ -73,7 +73,7 @@ _insert(struct set *s, struct atom *a) {
 
 static struct atom *
 _alloc(struct storage *g, size_t len) {
-	size_t size = sizeof(struct atom) + len + 1;
+	size_t size = sizeof(struct atom) + len;
 	size = aligned(size);
 	if (size >= BLOCK_SIZE) {
 		// XXX assertion failure ?!
@@ -96,7 +96,7 @@ _alloc(struct storage *g, size_t len) {
 
 static struct atom *
 _new(struct storage *g, uint32_t h, const char *str, size_t len) {
-	struct atom *a = _alloc(g, len);
+	struct atom *a = _alloc(g, len+1);
 	a->len = (uint32_t)len;
 	a->hash = h;
 	memcpy(a->str, str, len);
