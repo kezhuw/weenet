@@ -6,8 +6,8 @@
 #include <stdbool.h>
 
 struct weenet_atom {
-	uint32_t len;
-	char str[];
+	const uint32_t len;
+	const char str[];
 };
 
 struct weenet_atom *weenet_atom_new(const char *str, size_t len);
