@@ -80,6 +80,7 @@ _alloc(struct storage *g, size_t len) {
 		struct block *b = wmalloc(sizeof(*b) + size);
 		b->next = g->first->next;
 		g->first->next = b;
+		return (struct atom *)b->bytes;
 	} else if (g->seq + size > g->end) {
 		struct block *b = wmalloc(sizeof(*b) + BLOCK_SIZE);
 		b->next = g->last->next;
