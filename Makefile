@@ -2,7 +2,7 @@ NAME = weenet
 
 default : debug
 
-debug : CFLAGS += -g -O0
+debug : CFLAGS += -g
 debug : normal
 
 asan : CFLAGS += -fsanitize=address -fno-omit-frame-pointer
