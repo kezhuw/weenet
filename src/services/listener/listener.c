@@ -19,11 +19,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+enum { MAX_SOCKETS = 16 };
+
 struct listener {
-	int fd;
 	process_t self;
 	monitor_t monitor;
 	struct weenet_process *forward;
+	int nsocket;
+	int sockets[MAX_SOCKETS];
 	char address[];
 };
 
@@ -97,8 +100,30 @@ _option(int fd) {
 	return setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 }
 
-static int
-_listen(const char *address, size_t len, int backlog) {
+static const char *
+_getaddrinfo(int family, const char *host, const char *port, struct addrinfo **res) {
+	struct addrinfo hint;
+	memzero(&hint, sizeof hint);
+	hint.ai_family = family;
+	hint.ai_socktype = SOCK_STREAM;
+	hint.ai_protocol = IPPROTO_TCP;
+	hint.ai_flags = AI_PASSIVE;
+
+	*res = NULL;
+	int err = getaddrinfo(host, port, &hint, res);
+	switch (err) {
+	case 0:
+		break;
+	case EAI_SYSTEM:
+		return strerror(errno);
+	default:
+		return gai_strerror(err);
+	}
+	return (*res == NULL) ? "no match addrinfo" : NULL;
+}
+
+static const char *
+_listen(const char *address, size_t len, int backlog, int *nsocket, int sockets[MAX_SOCKETS]) {
 	char tmp[len+1];
 	memcpy(tmp, address, len+1);
 	address = tmp;
@@ -108,33 +133,72 @@ _listen(const char *address, size_t len, int backlog) {
 	int family = AF_UNSPEC;
 	int err = _parse(tmp, len, &family, &host, &port);
 	if (err != 0) {
-		return -1;
+		return "illegal address format";
 	}
 
-	struct addrinfo hint;
-	memzero(&hint, sizeof hint);
-	hint.ai_family = family;
-	hint.ai_socktype = SOCK_STREAM;
-	hint.ai_protocol = IPPROTO_TCP;
-	hint.ai_flags = AI_PASSIVE;
-
 	struct addrinfo *res;
-	err = getaddrinfo(host, port, &hint, &res);
-	int fd = -1;
-	for (struct addrinfo *ai = res; ai != NULL; ai = ai->ai_next) {
-		fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+	const char *error = _getaddrinfo(family, host, port, &res);
+	if (error != NULL) {
+		return error;
+	}
+
+	int n = 0;
+	for (struct addrinfo *ai = res; ai != NULL && n < MAX_SOCKETS; ai = ai->ai_next) {
+		int fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
 		if (fd != -1) {
 			if (_option(fd) == 0
 			 && bind(fd, ai->ai_addr, ai->ai_addrlen) == 0
 			 && listen(fd, backlog) == 0) {
-				break;
+				sockets[n++] = fd;
+				continue;
 			}
 			close(fd);
-			fd = -1;
 		}
 	}
 	freeaddrinfo(res);
-	return fd;
+	*nsocket = n;
+
+	return n == 0 ? "failed to listen" : NULL;
+}
+
+static void
+_monitor(struct listener *l, int op) {
+	process_t self = l->self;
+	for (int i=0, n=l->nsocket; i<n; ++i) {
+		int fd = l->sockets[i];
+		weenet_event_monitor(self, 0, fd, op, WEVENT_READ);
+	}
+}
+
+static void
+_close(struct listener *l) {
+	for (int i=0, n=l->nsocket; i<n; ++i) {
+		close(l->sockets[i]);
+	}
+}
+
+static int
+_accept(struct listener *l, int fd) {
+	for (;;) {
+		int conn = accept(fd, NULL, NULL);
+		if (conn < 0) {
+			int err = errno;
+			switch (err) {
+			case EINTR:
+				continue;
+			case EAGAIN:
+				return 0;
+			default:
+				weenet_logger_fatalf("accept(%s) error: %s.\n", l->address, strerror(err));
+				return -1;
+			}
+		}
+		if (_noblocking(conn) == -1) {
+			weenet_logger_fatalf("set noblocking mode failed: %s\n", strerror(errno));
+		}
+		weenet_process_push(l->forward, l->self, 0, WMESSAGE_TYPE_FILE|WMESSAGE_RIDX_FILE, (uintptr_t)conn, 0);
+	}
+	return 0;
 }
 
 static struct listener *
@@ -144,29 +208,31 @@ listener_new(struct weenet_process *p, uintptr_t data, uintptr_t meta) {
 	if (address == NULL) return NULL;
 	size_t len = strlen(address);
 	int backlog = (int)meta;
-	int fd = _listen(address, len, backlog);
-	if (fd < 0) {
-		weenet_logger_errorf("listen(%s, %d) failed: %s.\n", address, backlog, strerror(errno));
+	int nsocket;
+	int sockets[MAX_SOCKETS];
+	const char *error = _listen(address, len, backlog, &nsocket, sockets);
+	if (error != NULL) {
+		weenet_logger_errorf("listen(%s, %d) failed: %s.\n", address, backlog, error);
 		return NULL;
 	}
 	struct listener *l = wmalloc(sizeof(*l) + len + 1);
-	l->fd = fd;
 	l->self = weenet_process_self(p);
 	l->monitor = 0;
 	l->forward = NULL;
+	l->nsocket = nsocket;
+	memcpy(l->sockets, sockets, sizeof(int) * MAX_SOCKETS);
 	memcpy(l->address, address, len+1);
 	return l;
 }
 
 static void
 listener_delete(struct listener *l) {
-	close(l->fd);
+	_close(l);
 	wfree(l);
 }
 
 static int
 listener_handle(struct listener *l, struct weenet_process *p, struct weenet_message *m) {
-	int fd = l->fd;
 	uint32_t type = weenet_message_type(m);
 	switch (type) {
 	case WMESSAGE_TYPE_TEXT:
@@ -175,10 +241,10 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 			l->monitor = 0;
 			weenet_process_demonitor(p, l->monitor);
 			if (forward == NULL) {
-				weenet_event_monitor(l->self, 0, fd, WEVENT_DELETE, WEVENT_READ);
+				_monitor(l, WEVENT_DELETE);
 			}
 		} else if (forward != NULL) {
-			weenet_event_monitor(l->self, 0, fd, WEVENT_ADD, WEVENT_READ);
+			_monitor(l, WEVENT_ADD);
 		}
 		l->forward = forward;
 		if (forward != NULL) {
@@ -192,31 +258,12 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 		assert(l->monitor == (monitor_t)m->meta && l->forward == (void*)m->data);
 		l->monitor = 0;
 		l->forward = NULL;
-		weenet_event_monitor(l->self, 0, fd, WEVENT_DELETE, WEVENT_READ);
+		_monitor(l, WEVENT_DELETE);
 		break;
 	case WMESSAGE_TYPE_EVENT:
 		if (l->forward == NULL) return 0;
-		for (;;) {
-			int conn = accept(fd, NULL, NULL);
-			if (conn < 0) {
-				int err = errno;
-				switch (err) {
-				case EINTR:
-					break;
-				case EAGAIN:
-					return 0;
-				default:
-					weenet_logger_fatalf("accept(%s) error: %s.\n", l->address, strerror(err));
-					return -1;
-				}
-				continue;
-			}
-			if (_noblocking(conn) == -1) {
-				weenet_logger_fatalf("set noblocking mode failed: %s\n", strerror(errno));
-			}
-			weenet_process_push(l->forward, l->self, 0, WMESSAGE_TYPE_FILE|WMESSAGE_RIDX_FILE, (uintptr_t)conn, 0);
-		}
-		break;
+		int fd = (int)m->data;
+		return _accept(l, fd);
 	default:
 		break;
 	}
