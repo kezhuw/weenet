@@ -6,26 +6,11 @@ enum { WEVENT_DISABLED = 0xC0000000 };
 #define _recorded(e)		((e) != 0 && !_disabled(e))
 #define _mask(e)		((e) & WEVENT_MASK)
 
-struct event_data {
-	int fd;
-	int lock;
-	struct {
-		uint32_t event;
-		process_t source;
-		session_t session;
-	} read;
-	struct {
-		uint32_t event;
-		process_t source;
-		session_t session;
-	} write;
+struct filter {
+	uint32_t event;
+	process_t source;
+	session_t session;
 };
-
-#define _lock_data(d)		weenet_atomic_lock(&d->lock)
-#define _unlock_data(d)		weenet_atomic_unlock(&d->lock)
-
-#define _lock_event(e)		weenet_atomic_lock(&e->lock)
-#define _unlock_event(e)	weenet_atomic_unlock(&e->lock)
 
 enum {
 	EPOLL_READ		= EPOLLIN | EPOLLPRI | EPOLLET,
@@ -34,6 +19,163 @@ enum {
 	EPOLL_READ_MASK		= EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP | EPOLLRDHUP,
 	EPOLL_WRITE_MASK	= EPOLLOUT | EPOLLHUP,
 };
+
+static uint32_t MASKS[2] = { EPOLL_READ_MASK, EPOLL_WRITE_MASK };
+
+static int EVENTS[2] = { WEVENT_READ, WEVENT_WRITE };
+static int INDICES[] = { [WEVENT_READ] = 0, [WEVENT_WRITE] = 1 };
+
+struct file {
+	int fd;
+	int lock;
+	int pending;
+	struct filter filters[2];
+};
+
+#define _lock_file(f)		weenet_atomic_lock(&f->lock)
+#define _unlock_file(f)		weenet_atomic_unlock(&f->lock)
+
+inline static void
+_init(struct file *f, int fd) {
+	f->fd = fd;
+	f->pending = 0;
+	f->filters[0].event = 0;
+	f->filters[1].event = 0;
+}
+
+inline static void
+_clear(struct file *f) {
+	f->fd = -1;
+}
+
+#define _lock_event(e)		weenet_atomic_lock(&e->lock)
+#define _unlock_event(e)	weenet_atomic_unlock(&e->lock)
+
+inline static void
+_send(process_t pid, session_t session, int fd, int event) {
+#define WMESSAGE_TAGS_EVENT	(WMESSAGE_TYPE_EVENT | WMESSAGE_FLAG_RESPONSE)
+	weenet_process_send(pid, 0, session, WMESSAGE_TAGS_EVENT, (uintptr_t)fd, (uintptr_t)event);
+}
+
+static void
+_report(struct file *f, uint32_t events, int epfd) {
+	struct {
+		process_t source;
+		session_t session;
+	} fires[] = { {0,0}, {0,0} };
+
+	_lock_file(f);
+
+	int fd = f->fd;
+	if (fd == -1) {
+		_unlock_file(f);
+		return;
+	}
+
+	for (int index = 0; index <= 1; ++index) {
+		if ((events & MASKS[index])) {
+			uint32_t event = f->filters[index].event;
+			if (_recorded(event)) {
+				fires[index].source = f->filters[index].source;
+				fires[index].session = f->filters[index].session;
+				if ((event & WEVENT_ONESHOT)) {
+					f->filters[index].event = 0;
+				} else if ((event & WEVENT_DISPATCH)) {
+					f->filters[index].event |= WEVENT_DISABLED;
+				}
+			} else {
+				f->pending |= EVENTS[index];
+			}
+		}
+	}
+
+	if (f->filters[0].event == 0 && f->filters[1].event == 0) {
+		epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+		_clear(f);
+	}
+
+	_unlock_file(f);
+
+	for (int index = 0; index <= 1; ++index) {
+		_send(fires[index].source, fires[index].session, fd, EVENTS[index]);
+	}
+}
+
+inline static int
+_pending(int *pending, int event) {
+	if ((*pending & event)) {
+		*pending &= ~event;
+		return event;
+	}
+	return 0;
+}
+
+static int
+_monitor(int epfd, process_t source, session_t session, int op, int event, int fd, struct file *f) {
+	int pending = 0;
+	int index = INDICES[_mask(event)];
+
+	_lock_file(f);
+
+	if (f->fd == -1) {
+		if (op != WEVENT_ADD) {
+			_unlock_file(f);
+			return  EINVAL;
+		}
+
+		_init(f, fd);
+		f->filters[index].event = (uint32_t)event;
+		f->filters[index].source = source;
+		f->filters[index].session = session;
+
+		struct epoll_event ev;
+		ev.events = EPOLL_READ | EPOLL_WRITE;
+		ev.data.ptr = f;
+		int err = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
+		if (err != 0) {
+			err = errno;
+			assert(err != EEXIST);
+			_clear(f);
+		}
+		_unlock_file(f);
+		return err;
+	}
+
+	assert(f->fd == fd);
+
+	switch (op) {
+	case WEVENT_ADD:
+		f->filters[index].event = (uint32_t)event;
+		f->filters[index].source = source;
+		f->filters[index].session = session;
+		pending = _pending(&f->pending, _mask(event));
+		break;
+	case WEVENT_ENABLE:
+		if (!_disabled(f->filters[index].event)) {
+			break;
+		}
+		f->filters[index].event &= ~WEVENT_DISABLED;
+		f->filters[index].source = source;
+		f->filters[index].session = session;
+		pending = _pending(&f->pending, _mask(event));
+		break;
+	case WEVENT_DELETE:
+		f->filters[index].event = 0;
+		if (f->filters[0].event == 0 && f->filters[1].event == 0) {
+			epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+			_clear(f);
+		}
+		break;
+	}
+
+	_unlock_file(f);
+
+	if (pending != 0) {
+		_send(source, session, fd, pending);
+	}
+
+	return 0;
+}
 
 static void *
 _poll(void *arg) {
@@ -57,69 +199,10 @@ _poll(void *arg) {
 			continue;
 		}
 		for (int i=0; i<n; ++i) {
-			uint32_t e = events[i].events;
-			struct event_data *d = events[i].data.ptr;
-			struct {
-				process_t source;
-				session_t session;
-			} read = {0, 0};
-			struct {
-				process_t source;
-				session_t session;
-			} write = {0, 0};
-			int fd = d->fd;
-			_lock_data(d);
-			uint32_t revent = d->read.event;
-			uint32_t wevent = d->write.event;
-			if ((e & EPOLL_READ_MASK) && _recorded(revent)) {
-				read.source = d->read.source;
-				read.session = d->read.session;
-				if ((revent & (WEVENT_ONESHOT|WEVENT_DISPATCH))) {
-					if ((revent & WEVENT_ONESHOT)) {
-						revent = 0;
-						d->read.event = 0;
-					} else {
-						revent |= WEVENT_DISABLED;
-						d->read.event |= WEVENT_DISABLED;
-					}
-					struct epoll_event ev;
-					ev.data.ptr = d;
-					if (_recorded(wevent)) {
-						ev.events = EPOLL_WRITE;
-						epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
-					} else {
-						epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev);
-					}
-				}
-			}
-			if ((e & EPOLL_WRITE_MASK) && _recorded(wevent)) {
-				write.source = d->write.source;
-				write.session = d->write.session;
-				if ((wevent & (WEVENT_ONESHOT|WEVENT_DISPATCH))) {
-					if ((wevent & WEVENT_ONESHOT)) {
-						d->write.event = 0;
-					} else {
-						d->write.event |= WEVENT_DISABLED;
-					}
-					struct epoll_event ev;
-					ev.data.ptr = d;
-					if (_recorded(revent)) {
-						ev.events = EPOLL_READ;
-						epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
-					} else {
-						epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev);
-					}
-				}
-			}
-			_unlock_data(d);
-			if (read.source != 0) {
-				weenet_process_send(read.source, 0, read.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, (uintptr_t)fd, WEVENT_READ);
-			}
-			if (write.source != 0) {
-				weenet_process_send(write.source, 0, write.session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, (uintptr_t)fd, WEVENT_WRITE);
-			}
+			_report(events[i].data.ptr, events[i].events, epfd);
 		}
 	}
+	return NULL;
 }
 
 struct event {
@@ -127,31 +210,31 @@ struct event {
 	size_t size;
 	int lock;
 	int epfd;
-	struct event_data **events;
+	struct file **files;
 };
 
 static struct event *E;
 
 int
 weenet_event_start(int max) {
-	int epfd = epoll_create(max);
+	int epfd = epoll_create(1);
 	if (epfd < 0) {
 		perror("epoll_create(1)");
 		return -1;
 	}
+
 	struct event *e = wcalloc(sizeof(struct event));
 	e->size = (size_t)max + 1024;
 	e->epfd = epfd;
-	e->events = wcalloc(sizeof(struct event_data *)*e->size);
-	assert(e->events != NULL);
+	e->files = wcalloc(sizeof(struct file *)*e->size);
+	assert(e->files != NULL);
 
 	pthread_t tid;
 	int err = pthread_create(&tid, NULL, _poll, (void*)(intptr_t)epfd);
 	if (err != 0) {
-		errno = err;
-		perror("pthread_create() in event");
+		fprintf(stderr, "pthread_create() in event_start: %s\n", strerror(err));
 		close(epfd);
-		wfree(e->events);
+		wfree(e->files);
 		wfree(e);
 		return -1;
 	}
@@ -164,7 +247,8 @@ int
 weenet_event_monitor(process_t source, session_t session, int fd, int op, int event) {
 	if (source == 0) return EINVAL;
 
-	if (_mask(event) != WEVENT_READ && _mask(event) != WEVENT_WRITE) {
+	int filter = _mask(event);
+	if (filter != WEVENT_READ && filter != WEVENT_WRITE) {
 		return EINVAL;
 	}
 	if (op != WEVENT_ADD && op != WEVENT_ENABLE && op != WEVENT_DELETE) {
@@ -175,127 +259,27 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 	_lock_event(e);
 	if ((size_t)fd >= e->size) {
 		size_t size = 2*e->size + 1;
-		struct event_data **events = wrealloc(e->events, sizeof(void*)*size);
-		if (events == NULL) {
-			weenet_atomic_unlock(&e->lock);
+		struct file **files = wrealloc(e->files, sizeof(void*)*size);
+		if (files == NULL) {
+			_unlock_event(e);
 			return -1;
 		}
-		memzero(events+e->size, sizeof(void*)*(size - e->size));
-		e->events = events;
+		memzero(files+e->size, sizeof(void*)*(size - e->size));
+		e->files = files;
 		e->size = size;
 	}
-	struct event_data *d = e->events[fd];
-	if (d == NULL) {
-		d = wcalloc(sizeof(*d));
-		e->events[fd] = d;
-		d->fd = fd;
+	struct file *f = e->files[fd];
+	if (f == NULL) {
+		// TODO custom allocator
+		f = wmalloc(sizeof(*f));
+		e->files[fd] = f;
+		f->fd = -1;
+		f->lock = 0;
 	}
 	if (fd > e->max) {
 		e->max = fd;
 	}
 	_unlock_event(e);
 
-	int epfd = e->epfd;
-	struct epoll_event ev;
-	ev.data.ptr = d;
-	int err = 0;
-	_lock_data(d);
-	if (_mask(event) == WEVENT_READ) {
-		if (op == WEVENT_DELETE) {
-			if (d->read.event == 0) {
-				err = ENOENT;
-				goto done;
-			}
-			if (!_disabled(d->read.event)) {
-				if (_recorded(d->write.event)) {
-					ev.events = EPOLL_WRITE;
-					err = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
-				} else {
-					err = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev);
-				}
-				if (err != 0) {
-					err = errno;
-				}
-			}
-			d->read.event = 0;
-		} else {
-			if (op == WEVENT_ENABLE) {
-				if (d->read.event == 0) {
-					err = ENOENT;
-					goto done;
-				} else if (!_disabled(d->read.event)) {
-					err = EEXIST;
-					goto done;
-				}
-			} else if (op == WEVENT_ADD) {
-				if (d->read.event != 0) {
-					err = EEXIST;
-					goto done;
-				}
-			}
-			if (_recorded(d->write.event)) {
-				ev.events = EPOLL_READ | EPOLL_WRITE;
-				err = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
-			} else {
-				ev.events = EPOLL_READ;
-				err = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
-			}
-			if (err != 0) {
-				err = errno;
-			}
-			d->read.event = (uint32_t)event;
-			d->read.source = source;
-			d->read.session = session;
-		}
-	} else if (_mask(event) == WEVENT_WRITE) {
-		if (op == WEVENT_DELETE) {
-			if (d->write.event == 0) {
-				err = ENOENT;
-				goto done;
-			}
-			if (!_disabled(d->write.event)) {
-				if (_recorded(d->read.event)) {
-					ev.events = EPOLL_READ;
-					err = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
-				} else {
-					err = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev);
-				}
-				if (err != 0) {
-					err = errno;
-				}
-			}
-			d->write.event = 0;
-		} else {
-			if (op == WEVENT_ENABLE) {
-				if (d->write.event == 0) {
-					err = ENOENT;
-					goto done;
-				} else if (!_disabled(d->write.event)) {
-					err = EEXIST;
-					goto done;
-				}
-			} else if (op == WEVENT_ADD) {
-				if (d->write.event != 0) {
-					err = EEXIST;
-					goto done;
-				}
-			}
-			if (_recorded(d->read.event)) {
-				ev.events = EPOLL_READ | EPOLL_WRITE;
-				err = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ev);
-			} else {
-				ev.events = EPOLL_WRITE;
-				err = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
-			}
-			if (err != 0) {
-				err = errno;
-			}
-			d->write.event = (uint32_t)event;
-			d->write.source = source;
-			d->write.session = session;
-		}
-	}
-done:
-	_unlock_data(d);
-	return err;
+	return _monitor(e->epfd, source, session, op, event, fd, f);
 }
