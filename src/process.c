@@ -207,7 +207,7 @@ weenet_monitor_insert(struct weenet_monitor *m, monitor_t mref, struct weenet_pr
 }
 
 static struct weenet_process *
-weenet_monitor_remove(struct weenet_monitor *m, uintreg_t mref, struct weenet_process *proc) {
+weenet_monitor_remove(struct weenet_monitor *m, monitor_t mref, struct weenet_process *proc) {
 	uint32_t n = m->num;
 	if (n == 0) return false;
 	uint32_t last = n-1;
@@ -638,7 +638,7 @@ weenet_process_work(struct weenet_process *p) {
 				weenet_monitor_retire(&p->supervisors, p);
 				// XXX A dedicated 'RETIRED' service to terminate retired processes ?
 				weenet_process_release(p);
-			} else if (weenet_monitor_remove(&p->supervisees, (uintreg_t)msg->meta, NULL) != NULL) {
+			} else if (weenet_monitor_remove(&p->supervisees, (monitor_t)msg->meta, NULL) != NULL) {
 				// Filter out cancelled monitoring.
 				weenet_service_handle(p->service, p, msg);
 			}
