@@ -630,8 +630,7 @@ weenet_process_work(struct weenet_process *p) {
 		uint32_t type = weenet_message_type(msg);
 		switch (type) {
 		case WMESSAGE_TYPE_RETIRED:
-			;struct weenet_process *dst = (struct weenet_process *)msg->data;
-			if (dst == NULL) {	// send by weenet_process_retire()
+			if (msg->source == 0) {	// send by weenet_process_retire()
 				// 'p' is retired, no more lock need.
 				assert(p->retired == true);
 				// Send retired message to all processes that monitoring 'p'
