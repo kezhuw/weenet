@@ -624,8 +624,9 @@ weenet_process_work(struct weenet_process *p) {
 	if ((msg->tags & WMESSAGE_FLAG_INTERNAL)) {
 		msg->tags &= ~(uint32_t)WMESSAGE_FLAG_INTERNAL;
 		uint32_t type = weenet_message_type(msg);
-		if (type == WMESSAGE_TYPE_RETIRED) {
-			struct weenet_process *dst = (struct weenet_process *)msg->data;
+		switch (type) {
+		case WMESSAGE_TYPE_RETIRED:
+			;struct weenet_process *dst = (struct weenet_process *)msg->data;
 			if (dst == NULL) {	// send by weenet_process_retire()
 				// 'p' is retired, no more lock need.
 				assert(p->retired == true);
@@ -637,6 +638,10 @@ weenet_process_work(struct weenet_process *p) {
 				// Filter out cancelled monitoring.
 				weenet_service_handle(p->service, p, msg);
 			}
+			break;
+		default:
+			weenet_logger_fatalf("unexpected internal message type[%d]", type);
+			break;
 		}
 		weenet_message_unref(msg);
 		return true;
