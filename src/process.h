@@ -79,8 +79,6 @@ enum wmessage_info {
 	WMESSAGE_FLAG_RESPONSE		= 0x0200,
 	WMESSAGE_FLAG_INTERNAL		= 0x0400,
 	WMESSAGE_FLAG_MIGRATED		= 0x0800,	// resource ownership migrated to other
-
-	WMESSAGE_TAGS_RETIRED		= WMESSAGE_TYPE_RETIRED | WMESSAGE_RIDX_PROC | WMESSAGE_FLAG_INTERNAL,
 };
 
 struct weenet_message {

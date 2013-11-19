@@ -20,6 +20,10 @@
 #include <stdbool.h>
 #include <unistd.h>	// for close()
 
+enum {
+	WMESSAGE_TAGS_RETIRED		= WMESSAGE_TYPE_RETIRED | WMESSAGE_RIDX_PROC | WMESSAGE_FLAG_INTERNAL,
+};
+
 struct weenet_mailbox {
 	uint32_t num;
 	uint32_t size;
