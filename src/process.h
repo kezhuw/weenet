@@ -93,7 +93,6 @@ struct weenet_message {
 };
 
 inline static uint32_t weenet_message_type(struct weenet_message *msg);
-inline static uint32_t weenet_message_ridx(struct weenet_message *msg);
 
 typedef void (*resource_fini_t)(void *ud, uintptr_t data, uintptr_t meta);
 
@@ -111,11 +110,6 @@ void weenet_process_mail(struct weenet_process *p, struct weenet_message *m);
 inline static uint32_t
 weenet_message_type(struct weenet_message *msg) {
 	return (msg->tags & WMESSAGE_TYPE_MASK);
-}
-
-inline static uint32_t
-weenet_message_ridx(struct weenet_message *msg) {
-	return (msg->tags & WMESSAGE_RIDX_MASK);
 }
 
 session_t weenet_process_timeo(struct weenet_process *p, uint64_t msecs);

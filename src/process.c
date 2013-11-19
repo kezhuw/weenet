@@ -97,6 +97,21 @@ static struct {
 	} pairs[WMESSAGE_RIDX_MASK+1];
 } F;
 
+#define _ridx(tags)		((tags) & WMESSAGE_RIDX_MASK)
+#define _migrated(tags)		((tags) & WMESSAGE_FLAG_MIGRATED)
+
+static void
+_reclaim_resource(uint32_t tags, uintptr_t data, uintptr_t meta) {
+	if (_migrated(tags)) {
+		return;
+	}
+	uint32_t ridx = _ridx(tags);
+	resource_fini_t fn = F.pairs[ridx].fn;
+	if (fn != NULL) {
+		fn(F.pairs[ridx].ud, data, meta);
+	}
+}
+
 int
 weenet_message_gc(uint32_t id, void *ud, resource_fini_t fn) {
 	if (id == 0) return EINVAL;
@@ -125,13 +140,7 @@ weenet_message_new(process_t source, process_t session, uint32_t tags, uintptr_t
 
 void
 weenet_message_delete(struct weenet_message *m) {
-	if ((m->tags & WMESSAGE_FLAG_MIGRATED) == 0) {
-		uint32_t idx = weenet_message_ridx(m);
-		resource_fini_t fn = F.pairs[idx].fn;
-		if (fn != NULL) {
-			fn(F.pairs[idx].ud, m->data, m->meta);
-		}
-	}
+	_reclaim_resource(m->tags, m->data, m->meta);
 	slab_release(message_slab, m);
 }
 
@@ -671,6 +680,7 @@ session_t
 weenet_process_cast(struct weenet_process *p, process_t dst, uint32_t tags, uintptr_t data, uintptr_t meta) {
 	struct weenet_process *p1 = weenet_account_retain(dst);
 	if (p1 == NULL) {
+		_reclaim_resource(tags, data, meta);
 		return 0;
 	}
 	session_t sid = weenet_process_sid(p);
@@ -684,6 +694,7 @@ session_t
 weenet_process_call(struct weenet_process *p, process_t dst, uint32_t tags, uintptr_t data, uintptr_t meta) {
 	struct weenet_process *out = weenet_account_retain(dst);
 	if (out == NULL) {
+		_reclaim_resource(tags, data, meta);
 		return 0;
 	}
 	session_t sid = weenet_process_sid(p);
@@ -698,6 +709,7 @@ int
 weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t tags, uintptr_t data, uintptr_t meta) {
 	struct weenet_process *out = weenet_account_retain(dst);
 	if (out == NULL) {
+		_reclaim_resource(tags, data, meta);
 		return -1;
 	}
 	weenet_process_push(out, src, sid, tags, data, meta);
