@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <string.h>
 #include <weenet.h>
 
@@ -28,16 +29,18 @@ client_handle(struct client *e, struct weenet_process *p, struct weenet_message 
 	uint32_t type = weenet_message_type(m);
 	switch (type) {
 	case WMESSAGE_TYPE_RETIRED:
+		assert(e->agent != NULL);
 		e->agent = NULL;
+		weenet_process_retire(p);
 		break;
 	case WMESSAGE_TYPE_CLIENT:
 		;size_t size = (size_t)m->meta;
 		if (size == 0) {
 			weenet_process_retire(p);
 		} else if (e->agent != NULL) {
-			void *dup = wmalloc(size);
-			memcpy(dup, (void*)m->data, size);
-			weenet_process_push(e->agent, weenet_process_self(p), 0, WMESSAGE_TYPE_CLIENT|WMESSAGE_RIDX_MEMORY, (uintptr_t)dup, (uintptr_t)size);
+			weenet_message_take(m);
+			uint32_t tags = WMESSAGE_TYPE_CLIENT | WMESSAGE_RIDX_MEMORY;
+			weenet_process_push(e->agent, weenet_process_self(p), 0, tags, m->data, m->meta);
 		}
 		break;
 	default:

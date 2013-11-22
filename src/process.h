@@ -70,7 +70,7 @@ enum wmessage_info {
 	WMESSAGE_TYPE_DUMMY		= 9 << 16,
 	WMESSAGE_TYPE_WAKEUP		= 10 << 16,	// delete it ? equal to DUMMY
 	WMESSAGE_TYPE_RETIRE		= 11 << 16,
-	WMESSAGE_TYPE_DEMONITOR		= 12 << 16,
+	WMESSAGE_TYPE_MONITOR		= 12 << 16,
 	WMESSAGE_TYPE_RETIRED		= 13 << 16,
 	WMESSAGE_TYPE_UDEF_START	= 32767 << 16,
 	WMESSAGE_TYPE_UDEF_STOP		= 65535 << 16,
@@ -79,8 +79,6 @@ enum wmessage_info {
 	WMESSAGE_FLAG_RESPONSE		= 0x0200,
 	WMESSAGE_FLAG_INTERNAL		= 0x0400,
 	WMESSAGE_FLAG_MIGRATED		= 0x0800,	// resource ownership migrated to other
-
-	WMESSAGE_TAGS_RETIRED		= WMESSAGE_TYPE_RETIRED | WMESSAGE_RIDX_PROC | WMESSAGE_FLAG_INTERNAL,
 };
 
 struct weenet_message {
@@ -93,7 +91,6 @@ struct weenet_message {
 };
 
 inline static uint32_t weenet_message_type(struct weenet_message *msg);
-inline static uint32_t weenet_message_ridx(struct weenet_message *msg);
 
 typedef void (*resource_fini_t)(void *ud, uintptr_t data, uintptr_t meta);
 
@@ -111,11 +108,6 @@ void weenet_process_mail(struct weenet_process *p, struct weenet_message *m);
 inline static uint32_t
 weenet_message_type(struct weenet_message *msg) {
 	return (msg->tags & WMESSAGE_TYPE_MASK);
-}
-
-inline static uint32_t
-weenet_message_ridx(struct weenet_message *msg) {
-	return (msg->tags & WMESSAGE_RIDX_MASK);
 }
 
 session_t weenet_process_timeo(struct weenet_process *p, uint64_t msecs);
