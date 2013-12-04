@@ -102,42 +102,49 @@ _send(struct agent *g, byte_t *buf, size_t len) {
 	weenet_process_push(g->client, g->self, 0, WMESSAGE_TYPE_CLIENT | WMESSAGE_RIDX_MEMORY, (uintptr_t)ptr, (uintptr_t)len); 
 }
 
+#undef EEOF
+#define EEOF	(-1)
+
 static size_t
-_read(int fd, byte_t *buf, size_t len, bool *closed) {
+_read(int fd, byte_t *buf, size_t len, int *err) {
+	*err = 0;
 	size_t n = 0;
 	for (;;) {
 		ssize_t rd = read(fd, buf, len);
+		if (rd == 0) {
+			*err = EEOF;
+			break;
+		}
 		if (rd < 0) {
 			if (errno == EINTR) continue;
+			*err = errno;
 			break;
 		}
-		if (rd == 0) {
-			*closed = true;
-			break;
-		}
-		n += (size_t)rd;
-		assert((size_t)rd <= len);
-		len -= (size_t)rd;
+		size_t rz = (size_t)rd;
+		n += rz;
+		len -= rz;
 		if (len == 0) break;
-		buf += rd;
+		buf += rz;
 	}
 	return n;
 }
 
 static size_t
-_write(int fd, byte_t *data, size_t size) {
+_write(int fd, byte_t *data, size_t size, int *err) {
+	*err = 0;
 	size_t n = 0;
 	for (;;) {
 		ssize_t wr = write(fd, (void*)data, size);
 		if (wr < 0) {
 			if (errno == EINTR) continue;
+			*err = errno;
 			break;
 		}
-		assert((size_t)wr <= size);
-		n += (size_t)wr;
-		size -= (size_t)wr;
+		size_t wz = (size_t)wr;
+		n += wz;
+		size -= wz;
 		if (size == 0) break;
-		data += wr;
+		data += wz;
 	}
 	return n;
 }
@@ -151,19 +158,21 @@ _read_closed(struct agent *g) {
 static int
 _event_read(struct agent *g, struct weenet_process *p) {
 	int fd = g->fd;
-	bool closed = false;
 	for (;;) {
-		size_t n = _read(fd, g->buf, sizeof(g->buf), &closed);
+		int err;
+		size_t n = _read(fd, g->buf, sizeof(g->buf), &err);
 		if (n != 0) {
 			_send(g, g->buf, n);
 		}
-		if (closed) {
-			_read_closed(g);
+		switch (err) {
+		case 0:
 			break;
-		}
-		if (n < sizeof(g->buf)) {
-			int err = errno;
-			if (err == EAGAIN) return 0;
+		case EEOF:
+			_read_closed(g);
+			// fall through
+		case EAGAIN:
+			return 0;
+		default:
 			_send(g, NULL, 0);
 			weenet_event_monitor(g->self, 0, fd, WEVENT_DELETE, WEVENT_READ);
 			weenet_logger_errorf("read(%d) failed(%s).", fd, strerror(err));
@@ -186,7 +195,8 @@ _event_write(struct agent *g, struct weenet_process *p) {
 	size_t size = g->pending.head.size;
 	size_t i = 0, n = g->pending.tail.num;
 	for (;;) {
-		size_t wr = _write(fd, (void*)data, size);
+		int err;
+		size_t wr = _write(fd, (void*)data, size, &err);
 		if (wr < size) {
 			g->pending.head.msg = msg;
 			g->pending.head.data = data+wr;
@@ -200,7 +210,6 @@ _event_write(struct agent *g, struct weenet_process *p) {
 				} while (i<n);
 				assert(j == g->pending.tail.num);
 			}
-			int err = errno;
 			if (err == EAGAIN) {
 				return 0;
 			}
@@ -247,9 +256,9 @@ _event_client(struct agent *g, struct weenet_process *p, struct weenet_message *
 	} else {
 		byte_t *data = (byte_t*)m->data;
 		size_t size = (size_t)m->meta;
-		size_t wr = _write(fd, data, size);
+		int err;
+		size_t wr = _write(fd, data, size, &err);
 		if (wr < size) {
-			int err = errno;
 			if (err == EAGAIN) {
 				size -= wr;
 				g->pending.head.msg = weenet_message_ref(m);
