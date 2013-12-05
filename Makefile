@@ -47,7 +47,7 @@ define SERVICE_SRC
 $(addprefix src/services/, $(addprefix $1/, $(addsuffix .c, $1)))
 endef
 
-SRCS = atom.c compat.c event.c logger.c pipe.c memory.c process.c service.c slab.c main.c schedule.c timer.c
+SRCS = atom.c compat.c event.c logger.c pipe.c memory.c process.c service.c slab.c main.c schedule.c timer.c socket_buffer.c
 
 $(WEENET_BIN) : $(addprefix src/, $(SRCS)) | $(BUILD)
 	@echo "Building weenet ..."
