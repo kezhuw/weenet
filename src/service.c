@@ -217,8 +217,8 @@ weenet_library_unref(struct weenet_library *lib) {
 
 static struct weenet_library *
 _open(struct path *p, const char *name, size_t nlen) {
-	char buf[p->len+1];
 	_lock_path(p);
+	char buf[p->len+1];
 	memcpy(buf, p->buf, p->len+1);
 	_unlock_path(p);
 	char *it = buf;
