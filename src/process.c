@@ -511,6 +511,18 @@ _process_delete(struct weenet_process *p) {
 	slab_release(process_slab, p);
 }
 
+__thread struct weenet_process *_running;
+
+inline static struct weenet_process *
+_running_process() {
+	return _running;
+}
+
+inline static void
+_set_running_process(struct weenet_process *p) {
+	_running = p;
+}
+
 static bool weenet_process_work(struct weenet_process *p);
 
 struct weenet_process *
@@ -518,6 +530,8 @@ weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 	struct weenet_atom *atom = weenet_atom_new(name, strlen(name));
 	struct weenet_process *p = _process_new(atom);
 	p->id = weenet_account_enroll(p);
+	struct weenet_process *running = _running_process();
+	_set_running_process(p);
 	p->service = weenet_service_new(atom, p, data, meta);
 	if (p->service == NULL) {
 		fprintf(stderr, "failed to start new process [%s].\n", name);
@@ -525,11 +539,13 @@ weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 		weenet_monitor_notify(&p->supervisors, p);
 		weenet_process_release(p);
 		weenet_process_release(p);
+		_set_running_process(running);
 		return NULL;
 	}
 	if (weenet_process_work(p)) {
 		weenet_schedule_resume(p);
 	}
+	_set_running_process(running);
 	return p;
 }
 
@@ -726,17 +742,22 @@ weenet_process_timeo(struct weenet_process *p, uint64_t msecs) {
 
 bool
 weenet_process_resume(struct weenet_process *p) {
+	assert(_running_process() == NULL);
+	_set_running_process(p);
 	for (int i=0; i<10; ++i) {
 		if (!weenet_process_work(p)) {
+			_set_running_process(NULL);
 			return false;
 		}
 	}
+	_set_running_process(NULL);
 	return true;
 }
 
 // p must be current running process.
 monitor_t
 weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
+	assert(_running_process() == p);
 	monitor_t mref = weenet_atomic_inc(&p->mref);
 	weenet_monitor_insert(&p->supervisees, mref, (uintptr_t)dst);
 
@@ -754,6 +775,7 @@ weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
 // p must be current running process.
 void
 weenet_process_demonitor(struct weenet_process *p, monitor_t mref) {
+	assert(_running_process() == p);
 	struct weenet_process *dst = weenet_monitor_erase(&p->supervisees, mref);
 	if (dst != NULL) {
 		weenet_process_push(dst, _self(p), 0, WMESSAGE_TAGS_MONITOR, 0, mref);
