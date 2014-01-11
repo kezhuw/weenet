@@ -593,14 +593,6 @@ weenet_process_name(const struct weenet_process *p) {
 	return _name(p);
 }
 
-session_t
-weenet_process_boot(struct weenet_process *p, uint32_t tags, uintptr_t data, uintptr_t meta) {
-	assert(weenet_mailbox_num(&p->mailbox) == 0);
-	session_t sid = weenet_process_sid(p);
-	weenet_process_push(p, 0, sid, tags | WMESSAGE_TYPE_BOOT, data, meta);
-	return sid;
-}
-
 static bool
 weenet_process_work(struct weenet_process *p) {
 	struct weenet_message *msg = weenet_mailbox_pop(&p->mailbox);
@@ -669,12 +661,6 @@ void
 weenet_process_push(struct weenet_process *p, process_t src, session_t sid, uint32_t tags, uintptr_t data, uintptr_t meta) {
 	struct weenet_message *m = weenet_message_new(src, sid, tags, data, meta);
 	weenet_process_mail(p, m);
-}
-
-// Can't wakeup blocked process.
-void
-weenet_process_wakeup(struct weenet_process *p) {
-	weenet_process_push(p, 0, 0, WMESSAGE_TYPE_WAKEUP, 0, 0);
 }
 
 session_t

@@ -17,7 +17,6 @@ bool weenet_process_resume(struct weenet_process *p);
 
 void weenet_process_wait(struct weenet_process *p, session_t sid);
 
-session_t weenet_process_boot(struct weenet_process *p, uint32_t tags, uintptr_t data, uintptr_t meta);
 session_t weenet_process_cast(struct weenet_process *p, process_t dst, uint32_t tags, uintptr_t data, uintptr_t meta);
 session_t weenet_process_call(struct weenet_process *p, process_t dst, uint32_t tags, uintptr_t data, uintptr_t meta);
 int weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t tags, uintptr_t data, uintptr_t meta);
@@ -63,12 +62,9 @@ enum wmessage_info {
 	WMESSAGE_TYPE_ERROR		= 2 << 16,
 	WMESSAGE_TYPE_CLIENT		= 3 << 16,
 	WMESSAGE_TYPE_SYSTEM		= 4 << 16,
-	WMESSAGE_TYPE_BOOT		= 5 << 16,
 	WMESSAGE_TYPE_FILE		= 6 << 16,
 	WMESSAGE_TYPE_EVENT		= 7 << 16,
 	WMESSAGE_TYPE_TIMEO		= 8 << 16,
-	WMESSAGE_TYPE_DUMMY		= 9 << 16,
-	WMESSAGE_TYPE_WAKEUP		= 10 << 16,	// delete it ? equal to DUMMY
 	WMESSAGE_TYPE_RETIRE		= 11 << 16,
 	WMESSAGE_TYPE_MONITOR		= 12 << 16,
 	WMESSAGE_TYPE_RETIRED		= 13 << 16,
