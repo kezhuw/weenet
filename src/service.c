@@ -273,6 +273,24 @@ _open(struct path *p, const char *name, size_t nlen) {
 	return NULL;
 }
 
+static struct weenet_library *
+weenet_library_open(struct weenet_atom *name) {
+	struct map *m = &M;
+	_lock_map(m);
+	struct weenet_library *lib = _search(m, weenet_atom_str(name));
+	if (lib == NULL) {
+		lib = _open(&P, weenet_atom_str(name), weenet_atom_len(name));
+		if (lib == NULL) {
+			_unlock_map(m);
+			return NULL;
+		}
+		_insert(m, lib);
+	}
+	weenet_library_ref(lib);
+	_unlock_map(m);
+	return lib;
+}
+
 const char *
 weenet_library_path(const char *path, size_t len, int op) {
 	struct path *p = &P;
@@ -318,24 +336,6 @@ weenet_library_path(const char *path, size_t len, int op) {
 		break;
 	}
 	return NULL;
-}
-
-static struct weenet_library *
-weenet_library_open(struct weenet_atom *name) {
-	struct map *m = &M;
-	_lock_map(m);
-	struct weenet_library *lib = _search(m, weenet_atom_str(name));
-	if (lib == NULL) {
-		lib = _open(&P, weenet_atom_str(name), weenet_atom_len(name));
-		if (lib == NULL) {
-			_unlock_map(m);
-			return NULL;
-		}
-		_insert(m, lib);
-	}
-	weenet_library_ref(lib);
-	_unlock_map(m);
-	return lib;
 }
 
 int
