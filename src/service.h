@@ -5,6 +5,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 int weenet_init_service(const char *path);
 
@@ -22,6 +23,10 @@ int weenet_library_reload(struct weenet_atom *name);
 // 	and library will be unload after all these processes were retired.
 int weenet_library_unload(struct weenet_atom *name);
 
+struct weenet_interface;
+
+// false if already exist.
+bool weenet_library_inject(struct weenet_atom *name, struct weenet_interface *interface);
 
 struct weenet_process;
 struct weenet_message;
