@@ -554,7 +554,10 @@ weenet_process_delete(struct weenet_process *p) {
 	weenet_account_unlink(p->id);
 	assert(weenet_atomic_get(&p->refcnt) == 0);
 	if (p->service != NULL) {
+		struct weenet_process *running = _running_process();
+		_set_running_process(p);
 		weenet_service_delete(p->service, p);
+		_set_running_process(running);
 	}
 	weenet_monitor_unlink(&p->supervisees, p);
 	weenet_mailbox_cleanup(&p->mailbox);
