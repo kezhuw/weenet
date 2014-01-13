@@ -26,7 +26,7 @@ gate_new(struct weenet_process *p, const char *address) {
 	memcpy(g->address, address, len+1);
 
 	weenet_process_push(listener, self, 0, WMESSAGE_TYPE_TEXT|WMESSAGE_RIDX_PROC, (uintptr_t)weenet_process_retain(p), 0);
-	weenet_process_monitor(p, listener);
+	weenet_process_monitor(listener);
 	weenet_process_release(listener);
 
 	return g;

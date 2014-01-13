@@ -35,7 +35,7 @@ agent_new(struct weenet_process *p, uintptr_t data) {
 	g->self = self;
 	g->client = client;
 	g->socket_buffer = socket_buffer_new(self, fd, 10240);
-	weenet_process_monitor(p, client);
+	weenet_process_monitor(client);
 	weenet_process_release(client);
 	weenet_event_monitor(self, 0, fd, WEVENT_ADD, WEVENT_WRITE);
 

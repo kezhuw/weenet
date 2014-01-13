@@ -8,13 +8,13 @@ struct client {
 
 static struct client *
 client_new(struct weenet_process *p, uintptr_t data, uintptr_t meta) {
-	(void)meta;
+	(void)p; (void)meta;
 	struct weenet_process *agent = (struct weenet_process *)data;
 	if (agent == NULL) return NULL;
 
 	struct client *e = wmalloc(sizeof(*e));
 	e->agent = agent;
-	weenet_process_monitor(p, agent);
+	weenet_process_monitor(agent);
 	return e;
 }
 

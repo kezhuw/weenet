@@ -764,30 +764,28 @@ weenet_process_resume(struct weenet_process *p) {
 
 #define _ref(p)		weenet_process_retain(p)
 
-// p must be current running process.
 monitor_t
-weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
-	assert(_running_process() == p);
-	monitor_t mref = weenet_atomic_inc(&p->mref);
-	weenet_monitor_insert(&p->supervisees, mref, (uintptr_t)_ref(dst));
+weenet_process_monitor(struct weenet_process *p) {
+	struct weenet_process *self = _running_process();
+	monitor_t mref = ++self->mref;
+	weenet_monitor_insert(&self->supervisees, mref, (uintptr_t)_ref(p));
 
-	bool retired = weenet_atomic_get(&dst->retired);
+	bool retired = weenet_atomic_get(&p->retired);
 	if (retired) {
-		weenet_process_push(p, _pid(dst), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)_ref(dst), (uintptr_t)mref);
+		weenet_process_push(self, _pid(p), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)_ref(p), (uintptr_t)mref);
 	} else {
-		weenet_process_push(dst, _pid(p), 0, WMESSAGE_TAGS_MONITOR, 1, (uintptr_t)mref);
+		weenet_process_push(p, _pid(self), 0, WMESSAGE_TAGS_MONITOR, 1, (uintptr_t)mref);
 	}
 	return mref;
 }
 
-// p must be current running process.
 void
-weenet_process_demonitor(struct weenet_process *p, monitor_t mref) {
-	assert(_running_process() == p);
-	struct weenet_process *dst = weenet_monitor_erase(&p->supervisees, mref);
-	if (dst != NULL) {
-		weenet_process_push(dst, _pid(p), 0, WMESSAGE_TAGS_MONITOR, 0, mref);
-		weenet_process_release(dst);
+weenet_process_demonitor(monitor_t mref) {
+	struct weenet_process *self = _running_process();
+	struct weenet_process *p = weenet_monitor_erase(&self->supervisees, mref);
+	if (p != NULL) {
+		weenet_process_push(p, _pid(self), 0, WMESSAGE_TAGS_MONITOR, 0, mref);
+		weenet_process_release(p);
 	}
 }
 
