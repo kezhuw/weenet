@@ -734,19 +734,19 @@ weenet_process_resume(struct weenet_process *p) {
 	return true;
 }
 
+#define _ref(p)		weenet_process_retain(p)
+
 // p must be current running process.
 monitor_t
 weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
 	monitor_t mref = weenet_atomic_inc(&p->mref);
-	weenet_monitor_insert(&p->supervisees, mref, (uintptr_t)dst);
+	weenet_monitor_insert(&p->supervisees, mref, (uintptr_t)_ref(dst));
 
 	bool retired = weenet_atomic_get(&dst->retired);
 	if (retired) {
-		weenet_process_push(p, _self(dst), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)dst, (uintptr_t)mref);
-		weenet_atomic_add(&p->refcnt, 2);
+		weenet_process_push(p, _self(dst), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)_ref(dst), (uintptr_t)mref);
 	} else {
 		weenet_process_push(dst, _self(p), 0, WMESSAGE_TAGS_MONITOR, 1, (uintptr_t)mref);
-		weenet_atomic_add(&p->refcnt, 1);
 	}
 	return mref;
 }
