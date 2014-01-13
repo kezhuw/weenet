@@ -28,7 +28,7 @@ agent_new(struct weenet_process *p, uintptr_t data) {
 		return NULL;
 	}
 
-	process_t self = weenet_process_self(p);
+	process_t self = weenet_process_pid(p);
 	struct agent *g = wcalloc(sizeof(*g));
 	int fd = (int)data;
 	g->fd = fd;

@@ -40,7 +40,7 @@ client_handle(struct client *e, struct weenet_process *p, struct weenet_message 
 		} else if (e->agent != NULL) {
 			weenet_message_take(m);
 			uint32_t tags = WMESSAGE_TYPE_CLIENT | WMESSAGE_RIDX_MEMORY;
-			weenet_process_push(e->agent, weenet_process_self(p), 0, tags, m->data, m->meta);
+			weenet_process_push(e->agent, weenet_process_pid(p), 0, tags, m->data, m->meta);
 		}
 		break;
 	default:

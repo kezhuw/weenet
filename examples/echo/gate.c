@@ -20,7 +20,7 @@ gate_new(struct weenet_process *p, const char *address) {
 
 	size_t len = strlen(address);
 	struct gate *g = wmalloc(sizeof(*g) + len + 1);
-	process_t self = weenet_process_self(p);
+	process_t self = weenet_process_pid(p);
 	g->self = self;
 	g->listener = listener;
 	memcpy(g->address, address, len+1);

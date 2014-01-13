@@ -216,7 +216,7 @@ listener_new(struct weenet_process *p, uintptr_t data, uintptr_t meta) {
 		return NULL;
 	}
 	struct listener *l = wmalloc(sizeof(*l) + len + 1);
-	l->self = weenet_process_self(p);
+	l->self = weenet_process_pid(p);
 	l->monitor = 0;
 	l->forward = NULL;
 	l->nsocket = nsocket;

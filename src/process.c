@@ -62,7 +62,7 @@ struct weenet_process {
 	struct weenet_monitor supervisees;	// processes that this process monitoring
 };
 
-#define _self(p)	((p)->id)
+#define _pid(p)	((p)->id)
 #define _name(p)	((p)->name)
 
 static /*__thread*/ struct slab *process_slab;
@@ -183,7 +183,7 @@ weenet_monitor_notify(struct weenet_monitor *m, struct weenet_process *p) {
 	m->num = m->len = 0;
 	if (n != 0) {
 		weenet_atomic_add(&p->refcnt, (int32_t)n);
-		process_t self = _self(p);
+		process_t self = _pid(p);
 		for (uintreg_t i=0; i<n; ++i) {
 			process_t pid = (process_t)monitors[i].pref;
 			weenet_process_send(pid, self, 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)p, monitors[i].mref);
@@ -241,7 +241,7 @@ weenet_monitor_unlink(struct weenet_monitor *m, struct weenet_process *p) {
 	uint32_t n = m->num;
 	for (uint32_t i=0; i<n; ++i) {
 		struct weenet_process *dst = (struct weenet_process *)m->monitors[i].pref;
-		weenet_process_push(dst, _self(p), 0, WMESSAGE_TAGS_MONITOR, 0, (uintptr_t)m->monitors[i].mref);
+		weenet_process_push(dst, _pid(p), 0, WMESSAGE_TAGS_MONITOR, 0, (uintptr_t)m->monitors[i].mref);
 		weenet_process_release(dst);
 	}
 	wfree(m->monitors);
@@ -603,13 +603,18 @@ weenet_process_sid(struct weenet_process *p) {
 }
 
 process_t
-weenet_process_self(const struct weenet_process *p) {
-	return _self(p);
+weenet_process_pid(const struct weenet_process *p) {
+	return _pid(p);
 }
 
 const char *
 weenet_process_name(const struct weenet_process *p) {
 	return _name(p);
+}
+
+struct weenet_process *
+weenet_process_self() {
+	return _running_process();
 }
 
 static bool
@@ -627,7 +632,7 @@ weenet_process_work(struct weenet_process *p) {
 				weenet_monitor_remove(&p->supervisors, mref, (uintptr_t)msg->source);
 			} else if (weenet_atomic_get(&p->retired) == true) {
 				weenet_process_retain(p);
-				weenet_process_send(msg->source, _self(p), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)p, mref);
+				weenet_process_send(msg->source, _pid(p), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)p, mref);
 			} else {
 				weenet_monitor_insert(&p->supervisors, mref, (uintptr_t)msg->source);
 			}
@@ -690,7 +695,7 @@ weenet_process_cast(struct weenet_process *p, process_t dst, uint32_t tags, uint
 		return 0;
 	}
 	session_t sid = weenet_process_sid(p);
-	process_t src = weenet_process_self(p);
+	process_t src = weenet_process_pid(p);
 	weenet_process_push(p1, src, sid, tags, data, meta);
 	weenet_process_release(p1);
 	return sid;
@@ -705,7 +710,7 @@ weenet_process_call(struct weenet_process *p, process_t dst, uint32_t tags, uint
 	}
 	session_t sid = weenet_process_sid(p);
 	weenet_process_wait(p, sid);
-	process_t src = weenet_process_self(p);
+	process_t src = weenet_process_pid(p);
 	weenet_process_push(out, src, sid, tags, data, meta);
 	weenet_process_release(out);
 	return sid;
@@ -737,7 +742,7 @@ weenet_process_forward(process_t dst, struct weenet_message *m) {
 
 session_t
 weenet_process_timeo(struct weenet_process *p, uint64_t msecs) {
-	session_t pid = weenet_process_self(p);
+	session_t pid = weenet_process_pid(p);
 	session_t sid = weenet_process_sid(p);
 	weenet_time_timeout(pid, sid, msecs);
 	return sid;
@@ -766,10 +771,10 @@ weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst) {
 
 	bool retired = weenet_atomic_get(&dst->retired);
 	if (retired) {
-		weenet_process_push(p, _self(dst), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)dst, (uintptr_t)mref);
+		weenet_process_push(p, _pid(dst), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)dst, (uintptr_t)mref);
 		weenet_atomic_add(&p->refcnt, 2);
 	} else {
-		weenet_process_push(dst, _self(p), 0, WMESSAGE_TAGS_MONITOR, 1, (uintptr_t)mref);
+		weenet_process_push(dst, _pid(p), 0, WMESSAGE_TAGS_MONITOR, 1, (uintptr_t)mref);
 		weenet_atomic_add(&p->refcnt, 1);
 	}
 	return mref;
@@ -781,7 +786,7 @@ weenet_process_demonitor(struct weenet_process *p, monitor_t mref) {
 	assert(_running_process() == p);
 	struct weenet_process *dst = weenet_monitor_erase(&p->supervisees, mref);
 	if (dst != NULL) {
-		weenet_process_push(dst, _self(p), 0, WMESSAGE_TAGS_MONITOR, 0, mref);
+		weenet_process_push(dst, _pid(p), 0, WMESSAGE_TAGS_MONITOR, 0, mref);
 		weenet_process_release(dst);
 	}
 }

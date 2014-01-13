@@ -9,8 +9,10 @@ struct weenet_process;
 
 struct weenet_process * weenet_process_new(const char *name, uintptr_t data, uintptr_t meta);
 session_t weenet_process_sid(struct weenet_process *p);
-process_t weenet_process_self(const struct weenet_process *p);
+process_t weenet_process_pid(const struct weenet_process *p);
 const char *weenet_process_name(const struct weenet_process *p);
+
+struct weenet_process *weenet_process_self();
 
 void weenet_process_push(struct weenet_process *p, process_t src, session_t sid, uint32_t tags, uintptr_t data, uintptr_t meta);
 bool weenet_process_resume(struct weenet_process *p);
