@@ -190,7 +190,9 @@ weenet_library_delete(struct weenet_library *lib) {
 	if (lib->interface->fini != NULL) {
 		lib->interface->fini();
 	}
-	dlclose(lib->dynamic);
+	if (lib->dynamic) {
+		dlclose(lib->dynamic);
+	}
 	slab_release(library_slab, lib);
 }
 
@@ -273,6 +275,24 @@ _open(struct path *p, const char *name, size_t nlen) {
 	return NULL;
 }
 
+static struct weenet_library *
+weenet_library_open(struct weenet_atom *name) {
+	struct map *m = &M;
+	_lock_map(m);
+	struct weenet_library *lib = _search(m, weenet_atom_str(name));
+	if (lib == NULL) {
+		lib = _open(&P, weenet_atom_str(name), weenet_atom_len(name));
+		if (lib == NULL) {
+			_unlock_map(m);
+			return NULL;
+		}
+		_insert(m, lib);
+	}
+	weenet_library_ref(lib);
+	_unlock_map(m);
+	return lib;
+}
+
 const char *
 weenet_library_path(const char *path, size_t len, int op) {
 	struct path *p = &P;
@@ -320,24 +340,6 @@ weenet_library_path(const char *path, size_t len, int op) {
 	return NULL;
 }
 
-static struct weenet_library *
-weenet_library_open(struct weenet_atom *name) {
-	struct map *m = &M;
-	_lock_map(m);
-	struct weenet_library *lib = _search(m, weenet_atom_str(name));
-	if (lib == NULL) {
-		lib = _open(&P, weenet_atom_str(name), weenet_atom_len(name));
-		if (lib == NULL) {
-			_unlock_map(m);
-			return NULL;
-		}
-		_insert(m, lib);
-	}
-	weenet_library_ref(lib);
-	_unlock_map(m);
-	return lib;
-}
-
 int
 weenet_library_reload(struct weenet_atom *name) {
 	struct weenet_library *lib = _open(&P, weenet_atom_str(name), weenet_atom_len(name));
@@ -382,6 +384,21 @@ weenet_library_unload(struct weenet_atom *name) {
 		return EBUSY;
 	}
 	return 0;
+}
+
+bool
+weenet_library_inject(struct weenet_atom *name, struct weenet_interface *interface) {
+	struct map *m = &M;
+	_lock_map(m);
+	struct weenet_library *lib = _search(m, weenet_atom_str(name));
+	if (lib != NULL) {
+		_unlock_map(m);
+		return false;
+	}
+	lib = weenet_library_new(weenet_atom_str(name), NULL, interface);
+	_insert(m, lib);
+	_unlock_map(m);
+	return true;
 }
 
 #define _new_service()		((struct weenet_service *)wmalloc(sizeof(struct weenet_service)))
