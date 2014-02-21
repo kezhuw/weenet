@@ -28,14 +28,14 @@ agent_new(struct weenet_process *p, uintptr_t data) {
 		return NULL;
 	}
 
-	process_t self = weenet_process_self(p);
+	process_t self = weenet_process_pid(p);
 	struct agent *g = wcalloc(sizeof(*g));
 	int fd = (int)data;
 	g->fd = fd;
 	g->self = self;
 	g->client = client;
 	g->socket_buffer = socket_buffer_new(self, fd, 10240);
-	weenet_process_monitor(p, client);
+	weenet_process_monitor(client);
 	weenet_process_release(client);
 	weenet_event_monitor(self, 0, fd, WEVENT_ADD, WEVENT_WRITE);
 

@@ -438,7 +438,7 @@ weenet_service_handle(struct weenet_service *c, struct weenet_process *p, struct
 		if (upgrade->interface->reload != NULL) {
 			void *instance = upgrade->interface->reload(c->instance, p, lib->interface->version);
 			if (instance == NULL) {
-				weenet_logger_errorf("process[%ld name(%s)] reload failed!\n", (long)weenet_process_self(p), lib->name);
+				weenet_logger_errorf("process[%ld name(%s)] reload failed!\n", (long)weenet_process_pid(p), lib->name);
 				goto handle_message;
 			}
 			c->instance = instance;

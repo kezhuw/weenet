@@ -216,7 +216,7 @@ listener_new(struct weenet_process *p, uintptr_t data, uintptr_t meta) {
 		return NULL;
 	}
 	struct listener *l = wmalloc(sizeof(*l) + len + 1);
-	l->self = weenet_process_self(p);
+	l->self = weenet_process_pid(p);
 	l->monitor = 0;
 	l->forward = NULL;
 	l->nsocket = nsocket;
@@ -233,13 +233,14 @@ listener_delete(struct listener *l) {
 
 static int
 listener_handle(struct listener *l, struct weenet_process *p, struct weenet_message *m) {
+	(void)p;
 	uint32_t type = weenet_message_type(m);
 	switch (type) {
 	case WMESSAGE_TYPE_TEXT:
 		;struct weenet_process *forward = (void*)m->data;
 		if (l->monitor != 0) {
 			l->monitor = 0;
-			weenet_process_demonitor(p, l->monitor);
+			weenet_process_demonitor(l->monitor);
 			if (forward == NULL) {
 				_monitor(l, WEVENT_DELETE);
 			}
@@ -248,7 +249,7 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 		}
 		l->forward = forward;
 		if (forward != NULL) {
-			l->monitor = weenet_process_monitor(p, forward);
+			l->monitor = weenet_process_monitor(forward);
 		}
 		if ((m->tags & WMESSAGE_FLAG_REQUEST)) {
 			weenet_process_send(m->source, l->self, m->session, WMESSAGE_FLAG_RESPONSE, 0, 0);
