@@ -26,7 +26,7 @@ int weenet_library_unload(struct weenet_atom *name);
 struct weenet_interface;
 
 // false if already exist.
-bool weenet_library_inject(struct weenet_atom *name, struct weenet_interface *interface);
+bool weenet_library_inject(struct weenet_atom *name, const struct weenet_interface *interface);
 
 struct weenet_process;
 struct weenet_message;
