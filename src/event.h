@@ -30,6 +30,4 @@ int weenet_event_start(int max);
 // Similar to kqueue/kevent, (fd, event) is a pair.
 int weenet_event_monitor(process_t source, session_t session, int fd, int op, int event);
 
-uint64_t weenet_event_timeout(process_t source, session_t session, uint64_t timeout);
-
 #endif

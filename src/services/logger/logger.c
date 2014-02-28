@@ -136,7 +136,7 @@ logger_handle(struct logger *l, struct weenet_process *p, struct weenet_message 
 		if (l->creating) {
 			int fd = _open(l);
 			if (fd < 0) {
-				weenet_process_timeo(p, 1000);
+				weenet_process_timeout(1000);
 				return 0;
 			}
 			_close(l->fd);
@@ -176,7 +176,7 @@ logger_handle(struct logger *l, struct weenet_process *p, struct weenet_message 
 		l->fsize += size;
 		if (l->fsize >= l->limit && !l->creating) {
 			l->creating = true;
-			weenet_process_timeo(p, 1);
+			weenet_process_timeout(1);
 		}
 		break;
 	case WMESSAGE_TYPE_RETIRE:
