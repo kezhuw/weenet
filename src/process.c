@@ -571,6 +571,12 @@ weenet_process_retire(struct weenet_process *p) {
 	}
 }
 
+void
+weenet_process_suicide() {
+	struct weenet_process *self = _running_process();
+	weenet_process_retire(self);
+}
+
 struct weenet_process *
 weenet_process_retain(struct weenet_process *p) {
 	weenet_atomic_add(&p->refcnt, 1);
