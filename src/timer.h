@@ -7,18 +7,21 @@
 
 // Millisecond resolution.
 
+// zero-based monotonic time from startup.
+uint64_t weenet_time();
 
-uint64_t weenet_time_now();
+// realtime when weenet startup.
+uint64_t weenet_starttime();
 
-// Return timestamp when weenet_init_time() called.
-uint64_t weenet_time_starttime();
+// monotonic realtime, same as weenet_starttime() + weenet_time().
+uint64_t weenet_realtime();
 
-void weenet_time_timeout(process_t pid, session_t sid, uint64_t msecs);
 
+void weenet_timeout(process_t pid, session_t session, uint64_t msecs);
+
+// update monotonic time, return updated weenet_time.
+uint64_t weenet_update_time();
 
 int weenet_init_time();
-
-// Called by time update thread.
-void weenet_time_update();
 
 #endif

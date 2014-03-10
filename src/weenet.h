@@ -10,5 +10,6 @@
 #include "service.h"
 #include "timer.h"
 #include "types.h"
+#include "socket_buffer.h"
 
 #endif

@@ -20,13 +20,13 @@ gate_new(struct weenet_process *p, const char *address) {
 
 	size_t len = strlen(address);
 	struct gate *g = wmalloc(sizeof(*g) + len + 1);
-	process_t self = weenet_process_self(p);
+	process_t self = weenet_process_pid(p);
 	g->self = self;
 	g->listener = listener;
 	memcpy(g->address, address, len+1);
 
 	weenet_process_push(listener, self, 0, WMESSAGE_TYPE_TEXT|WMESSAGE_RIDX_PROC, (uintptr_t)weenet_process_retain(p), 0);
-	weenet_process_monitor(p, listener);
+	weenet_process_monitor(listener);
 	weenet_process_release(listener);
 
 	return g;

@@ -190,7 +190,9 @@ weenet_library_delete(struct weenet_library *lib) {
 	if (lib->interface->fini != NULL) {
 		lib->interface->fini();
 	}
-	dlclose(lib->dynamic);
+	if (lib->dynamic) {
+		dlclose(lib->dynamic);
+	}
 	slab_release(library_slab, lib);
 }
 
@@ -217,8 +219,8 @@ weenet_library_unref(struct weenet_library *lib) {
 
 static struct weenet_library *
 _open(struct path *p, const char *name, size_t nlen) {
-	char buf[p->len+1];
 	_lock_path(p);
+	char buf[p->len+1];
 	memcpy(buf, p->buf, p->len+1);
 	_unlock_path(p);
 	char *it = buf;
@@ -273,6 +275,24 @@ _open(struct path *p, const char *name, size_t nlen) {
 	return NULL;
 }
 
+static struct weenet_library *
+weenet_library_open(struct weenet_atom *name) {
+	struct map *m = &M;
+	_lock_map(m);
+	struct weenet_library *lib = _search(m, weenet_atom_str(name));
+	if (lib == NULL) {
+		lib = _open(&P, weenet_atom_str(name), weenet_atom_len(name));
+		if (lib == NULL) {
+			_unlock_map(m);
+			return NULL;
+		}
+		_insert(m, lib);
+	}
+	weenet_library_ref(lib);
+	_unlock_map(m);
+	return lib;
+}
+
 const char *
 weenet_library_path(const char *path, size_t len, int op) {
 	struct path *p = &P;
@@ -318,24 +338,6 @@ weenet_library_path(const char *path, size_t len, int op) {
 		break;
 	}
 	return NULL;
-}
-
-static struct weenet_library *
-weenet_library_open(struct weenet_atom *name) {
-	struct map *m = &M;
-	_lock_map(m);
-	struct weenet_library *lib = _search(m, weenet_atom_str(name));
-	if (lib == NULL) {
-		lib = _open(&P, weenet_atom_str(name), weenet_atom_len(name));
-		if (lib == NULL) {
-			_unlock_map(m);
-			return NULL;
-		}
-		_insert(m, lib);
-	}
-	weenet_library_ref(lib);
-	_unlock_map(m);
-	return lib;
 }
 
 int
@@ -384,6 +386,21 @@ weenet_library_unload(struct weenet_atom *name) {
 	return 0;
 }
 
+bool
+weenet_library_inject(struct weenet_atom *name, const struct weenet_interface *interface) {
+	struct map *m = &M;
+	_lock_map(m);
+	struct weenet_library *lib = _search(m, weenet_atom_str(name));
+	if (lib != NULL) {
+		_unlock_map(m);
+		return false;
+	}
+	lib = weenet_library_new(weenet_atom_str(name), NULL, interface);
+	_insert(m, lib);
+	_unlock_map(m);
+	return true;
+}
+
 #define _new_service()		((struct weenet_service *)wmalloc(sizeof(struct weenet_service)))
 #define _free_service(c)	wfree(c);
 
@@ -421,7 +438,7 @@ weenet_service_handle(struct weenet_service *c, struct weenet_process *p, struct
 		if (upgrade->interface->reload != NULL) {
 			void *instance = upgrade->interface->reload(c->instance, p, lib->interface->version);
 			if (instance == NULL) {
-				weenet_logger_errorf("process[%ld name(%s)] reload failed!\n", (long)weenet_process_self(p), lib->name);
+				weenet_logger_errorf("process[%ld name(%s)] reload failed!\n", (long)weenet_process_pid(p), lib->name);
 				goto handle_message;
 			}
 			c->instance = instance;

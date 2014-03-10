@@ -9,15 +9,16 @@ struct weenet_process;
 
 struct weenet_process * weenet_process_new(const char *name, uintptr_t data, uintptr_t meta);
 session_t weenet_process_sid(struct weenet_process *p);
-process_t weenet_process_self(const struct weenet_process *p);
+process_t weenet_process_pid(const struct weenet_process *p);
 const char *weenet_process_name(const struct weenet_process *p);
+
+struct weenet_process *weenet_process_self();
 
 void weenet_process_push(struct weenet_process *p, process_t src, session_t sid, uint32_t tags, uintptr_t data, uintptr_t meta);
 bool weenet_process_resume(struct weenet_process *p);
 
 void weenet_process_wait(struct weenet_process *p, session_t sid);
 
-session_t weenet_process_boot(struct weenet_process *p, uint32_t tags, uintptr_t data, uintptr_t meta);
 session_t weenet_process_cast(struct weenet_process *p, process_t dst, uint32_t tags, uintptr_t data, uintptr_t meta);
 session_t weenet_process_call(struct weenet_process *p, process_t dst, uint32_t tags, uintptr_t data, uintptr_t meta);
 int weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t tags, uintptr_t data, uintptr_t meta);
@@ -25,6 +26,7 @@ int weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t ta
 struct weenet_process *weenet_process_retain(struct weenet_process *p);
 bool weenet_process_release(struct weenet_process *p);
 void weenet_process_retire(struct weenet_process *p);
+void weenet_process_suicide();
 
 
 int weenet_init_process();
@@ -63,12 +65,9 @@ enum wmessage_info {
 	WMESSAGE_TYPE_ERROR		= 2 << 16,
 	WMESSAGE_TYPE_CLIENT		= 3 << 16,
 	WMESSAGE_TYPE_SYSTEM		= 4 << 16,
-	WMESSAGE_TYPE_BOOT		= 5 << 16,
 	WMESSAGE_TYPE_FILE		= 6 << 16,
 	WMESSAGE_TYPE_EVENT		= 7 << 16,
 	WMESSAGE_TYPE_TIMEO		= 8 << 16,
-	WMESSAGE_TYPE_DUMMY		= 9 << 16,
-	WMESSAGE_TYPE_WAKEUP		= 10 << 16,	// delete it ? equal to DUMMY
 	WMESSAGE_TYPE_RETIRE		= 11 << 16,
 	WMESSAGE_TYPE_MONITOR		= 12 << 16,
 	WMESSAGE_TYPE_RETIRED		= 13 << 16,
@@ -110,7 +109,7 @@ weenet_message_type(struct weenet_message *msg) {
 	return (msg->tags & WMESSAGE_TYPE_MASK);
 }
 
-session_t weenet_process_timeo(struct weenet_process *p, uint64_t msecs);
-monitor_t weenet_process_monitor(struct weenet_process *p, struct weenet_process *dst);
-void weenet_process_demonitor(struct weenet_process *p, monitor_t mref);
+session_t weenet_process_timeout(uint64_t msecs);
+monitor_t weenet_process_monitor(struct weenet_process *p);
+void weenet_process_demonitor(monitor_t mref);
 #endif
