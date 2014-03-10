@@ -747,11 +747,12 @@ weenet_process_forward(process_t dst, struct weenet_message *m) {
 }
 
 session_t
-weenet_process_timeo(struct weenet_process *p, uint64_t msecs) {
-	session_t pid = weenet_process_pid(p);
-	session_t sid = weenet_process_sid(p);
-	weenet_time_timeout(pid, sid, msecs);
-	return sid;
+weenet_process_timeout(uint64_t msecs) {
+	struct weenet_process *self = weenet_process_self();
+	process_t pid = weenet_process_pid(self);
+	session_t session = weenet_process_sid(self);
+	weenet_timeout(pid, session, msecs);
+	return session;
 }
 
 bool

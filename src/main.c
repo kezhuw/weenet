@@ -195,11 +195,6 @@ main(int argc, const char *argv[]) {
 	size_t num = 0;
 	struct service *services = _get_services(L, &num);
 
-	if (weenet_init_time() != 0) {
-		fprintf(stderr, "fail to init time module.\n");
-		exit(-1);
-	}
-
 	if (weenet_init_scheduler(threads) != 0) {
 		fprintf(stderr, "fail to start scheduler.\n");
 		exit(-1);
@@ -214,6 +209,10 @@ main(int argc, const char *argv[]) {
 	}
 	if (weenet_event_start(102400) != 0) {
 		fprintf(stderr, "fail to start event service.\n");
+		exit(-1);
+	}
+	if (weenet_init_time() != 0) {
+		fprintf(stderr, "fail to init time module.\n");
 		exit(-1);
 	}
 	if (weenet_init_logger(log_dir, 1024*1024*10) != 0) {
@@ -235,7 +234,7 @@ main(int argc, const char *argv[]) {
 	}
 
 	for (;;) {
-		weenet_time_update();
+		weenet_update_time();
 		usleep(1000);
 	}
 
