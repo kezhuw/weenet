@@ -109,7 +109,7 @@ weenet_message_type(struct weenet_message *msg) {
 	return (msg->tags & WMESSAGE_TYPE_MASK);
 }
 
-session_t weenet_process_timeout(uint64_t msecs);
+session_t weenet_process_timeout(uint64_t msecs, uintreg_t flag);
 monitor_t weenet_process_monitor(struct weenet_process *p);
 void weenet_process_demonitor(monitor_t mref);
 #endif

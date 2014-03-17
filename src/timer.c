@@ -104,7 +104,8 @@ _free_node(struct timer *t, struct node *n) {
 
 inline static void
 _send(process_t pid, session_t sid) {
-	weenet_process_send(pid, 0, sid, WMESSAGE_TYPE_TIMEO | WMESSAGE_FLAG_RESPONSE, 0, 0);
+	uint32_t flag = sid == 0 ? 0 : WMESSAGE_FLAG_RESPONSE;
+	weenet_process_send(pid, 0, sid, WMESSAGE_TYPE_TIMEO | flag, 0, 0);
 }
 
 static uint64_t
