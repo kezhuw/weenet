@@ -717,7 +717,7 @@ weenet_process_call(struct weenet_process *p, process_t dst, uint32_t tags, uint
 	session_t sid = weenet_process_sid(p);
 	weenet_process_wait(p, sid);
 	process_t src = weenet_process_pid(p);
-	weenet_process_push(out, src, sid, tags, data, meta);
+	weenet_process_push(out, src, sid, tags | WMESSAGE_FLAG_REQUEST, data, meta);
 	weenet_process_release(out);
 	return sid;
 }
