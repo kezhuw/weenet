@@ -4,6 +4,12 @@
 
 static int kqfd = -1;
 
+inline static void
+_send(process_t pid, session_t session, uintptr_t fd, uintptr_t event) {
+	uint32_t flag = session == 0 ? 0 : WMESSAGE_FLAG_RESPONSE;
+	weenet_process_send(pid, 0, session, WMESSAGE_TYPE_EVENT|flag, fd, event);
+}
+
 static void *
 _poll(void *arg) {
 	pthread_detach(pthread_self());
@@ -45,7 +51,7 @@ _poll(void *arg) {
 			process_t source = (process_t)udata;
 			session_t session = (session_t)(udata >> 32);
 			uintptr_t fd = ev->ident;
-			weenet_process_send(source, 0, session, WMESSAGE_TYPE_EVENT|WMESSAGE_FLAG_RESPONSE, fd, event);
+			_send(source, session, fd, event);
 		}
 	}
 	return NULL;

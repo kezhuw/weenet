@@ -53,8 +53,8 @@ _clear(struct file *f) {
 
 inline static void
 _send(process_t pid, session_t session, int fd, int event) {
-#define WMESSAGE_TAGS_EVENT	(WMESSAGE_TYPE_EVENT | WMESSAGE_FLAG_RESPONSE)
-	weenet_process_send(pid, 0, session, WMESSAGE_TAGS_EVENT, (uintptr_t)fd, (uintptr_t)event);
+	uint32_t flag = session == 0 ? 0 : WMESSAGE_FLAG_RESPONSE;
+	weenet_process_send(pid, 0, session, WMESSAGE_TYPE_EVENT|flag, (uintptr_t)fd, (uintptr_t)event);
 }
 
 static void
