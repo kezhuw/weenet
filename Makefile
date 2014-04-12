@@ -34,7 +34,7 @@ INSTALL = install -v
 BUILD = build
 BUILD_SERVICES_DIR = $(BUILD)/services
 
-SERVICES = listener logger #lua
+SERVICES = listener logger lua
 WEENET_BIN = $(BUILD)/$(NAME)
 WEENET_CONF = etc/weenet.conf
 SERVICES_DIR = $(BUILD)/services
@@ -51,7 +51,17 @@ SRCS = atom.c compat.c event.c logger.c pipe.c memory.c process.c service.c slab
 
 $(WEENET_BIN) : $(addprefix src/, $(SRCS)) | $(BUILD)
 	@echo "Building weenet ..."
-	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@ -Isrc
+	@echo "Done"
+	@echo
+
+LUA_CPATH = src/lualib/c
+LUA_CLIBS = socket
+LUA_CBINS = $(addprefix $(LUA_CPATH)/, $(addsuffix .so, $(LUA_CLIBS)))
+
+$(LUA_CBINS) : $(LUA_CPATH)/%.so : $(LUA_CPATH)/%.c
+	@echo "Building lua c lib: $*"
+	$(CC) $(CFLAGS) $(SHARED) $^ -o $@ -Isrc
 	@echo "Done"
 	@echo
 
@@ -71,7 +81,7 @@ $(BUILD) : $(BUILD_SERVICES_DIR)
 $(BUILD_SERVICES_DIR) $(INSTALL_SERVICES_DIR) $(INSTALL_INCLUDES_DIR):
 	@mkdir -p $@
 
-normal : $(WEENET_BIN) $(SERVICES_BIN)
+normal : $(WEENET_BIN) $(SERVICES_BIN) $(LUA_CBINS)
 
 install : $(INSTALL_SERVICES_DIR) $(INSTALL_INCLUDES_DIR)
 	$(INSTALL) $(WEENET_BIN) $(INSTALL_BIN)
@@ -81,6 +91,6 @@ install : $(INSTALL_SERVICES_DIR) $(INSTALL_INCLUDES_DIR)
 	@echo "#include \"weenet/weenet.h\"" > $(INSTALL_INC)/weenet.h
 
 clean :
-	rm -rf $(BUILD)
+	rm -rf $(BUILD) $(LUA_CBINS)
 
 .PHONY : default normal debug release release0 clean

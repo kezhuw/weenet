@@ -129,10 +129,9 @@ logger_delete(struct logger *l, struct weenet_process *p) {
 static int
 logger_handle(struct logger *l, struct weenet_process *p, struct weenet_message *m) {
 	(void)p;
-	uint32_t type = weenet_message_type(m);
-
-	switch (type) {
-	case WMESSAGE_TYPE_TIMEO:
+	uint32_t code = weenet_message_code(m);
+	switch (code) {
+	case WMSG_CODE_TIMEO:
 		if (l->creating) {
 			int fd = _open(l);
 			if (fd < 0) {
@@ -145,7 +144,7 @@ logger_handle(struct logger *l, struct weenet_process *p, struct weenet_message 
 			l->creating = false;
 		}
 		break;
-	case WMESSAGE_TYPE_TEXT:
+	case WMSG_CODE_TEXT:
 		if (m->meta == 0) {
 			return 0;
 		}
@@ -179,7 +178,7 @@ logger_handle(struct logger *l, struct weenet_process *p, struct weenet_message 
 			weenet_process_timeout(1, 0);
 		}
 		break;
-	case WMESSAGE_TYPE_RETIRE:
+	case WMSG_CODE_RETIRE:
 		break;
 	default:
 		return -1;
