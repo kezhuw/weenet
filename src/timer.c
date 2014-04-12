@@ -6,10 +6,9 @@
 #include "timer.h"
 #include "utils.h"
 
-#include <sys/time.h>
-
 #include <assert.h>
 #include <limits.h>
+#include <time.h>	// clock_gettime(2)
 
 // About algorithm See:
 //
