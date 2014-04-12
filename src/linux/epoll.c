@@ -51,12 +51,6 @@ _clear(struct file *f) {
 #define _lock_event(e)		weenet_atomic_lock(&e->lock)
 #define _unlock_event(e)	weenet_atomic_unlock(&e->lock)
 
-inline static void
-_send(process_t pid, session_t session, int fd, int event) {
-	uint32_t flag = session == 0 ? 0 : WMESSAGE_FLAG_RESPONSE;
-	weenet_process_send(pid, 0, session, WMESSAGE_TYPE_EVENT|flag, (uintptr_t)fd, (uintptr_t)event);
-}
-
 static void
 _report(struct file *f, uint32_t events, int epfd) {
 	struct {
@@ -97,7 +91,7 @@ _report(struct file *f, uint32_t events, int epfd) {
 	_unlock_file(f);
 
 	for (int index = 0; index <= 1; ++index) {
-		_send(fires[index].source, fires[index].session, fd, EVENTS[index]);
+		_send(fires[index].source, fires[index].session, (uintptr_t)fd, (uintptr_t)EVENTS[index]);
 	}
 }
 
@@ -114,6 +108,10 @@ static int
 _monitor(int epfd, process_t source, session_t session, int op, int event, int fd, struct file *f) {
 	int pending = 0;
 	int index = INDICES[_mask(event)];
+
+	if (session != 0) {
+		event |= WEVENT_ONESHOT;
+	}
 
 	_lock_file(f);
 
@@ -171,7 +169,7 @@ _monitor(int epfd, process_t source, session_t session, int op, int event, int f
 	_unlock_file(f);
 
 	if (pending != 0) {
-		_send(source, session, fd, pending);
+		_send(source, session, (uintptr_t)fd, (uintptr_t)pending);
 	}
 
 	return 0;

@@ -22,7 +22,7 @@ timeout_new(struct weenet_process *p, uintptr_t data, uintptr_t meta) {
 	t->msecs = (uint64_t)meta;
 	printf("new timeout service[%p]:\n", t);
 	printf("n[%" PRIu64 "] msecs[%" PRIu64 "]\n", t->n, t->msecs);
-	t->session = weenet_process_timeout(t->msecs, WMESSAGE_FLAG_REQUEST);
+	t->session = weenet_process_timeout(t->msecs, WMSG_KIND_REQUEST);
 	return t;
 }
 
@@ -34,7 +34,7 @@ timeout_handle(struct timeout *t, struct weenet_process *p, struct weenet_messag
 	printf("timeout %" PRIu64 "\n", i);
 
 	if (i < t->n) {
-		t->session = weenet_process_timeout(t->msecs, WMESSAGE_FLAG_REQUEST);
+		t->session = weenet_process_timeout(t->msecs, WMSG_KIND_REQUEST);
 	} else {
 		weenet_process_retire(p);
 	}

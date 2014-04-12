@@ -14,6 +14,14 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#undef weenet_logger_fatalf
+#undef weenet_logger_errorf
+#undef weenet_logger_printf
+
+void weenet_logger_printf(const char *fmt, ...);
+void weenet_logger_errorf(const char *fmt, ...);
+void weenet_logger_fatalf(const char *fmt, ...);
+
 static struct weenet_process *L;
 
 enum { BLOCK_SIZE = 1024*1024 };
@@ -234,7 +242,7 @@ weenet_init_logger(const char *dir, size_t limit) {
 	if (L == NULL) return -1;
 	M = _new();
 
-	weenet_message_gc(WMESSAGE_RIDX_LOG, NULL, _wrapped_free);
+	weenet_message_gc(WMSG_RIDX_LOG, NULL, _wrapped_free);
 
 	return 0;
 }
@@ -256,7 +264,8 @@ _vprintf(const char *prefix, size_t prelen, const char *fmt, va_list args) {
 			size_t len = (size_t)n;
 			char *ptr = _malloc(M, len);
 			memcpy(ptr, buf, len);
-			weenet_process_push(L, 0, 0, WMESSAGE_RIDX_LOG, (uintptr_t)ptr, (uintptr_t)len);
+			uint32_t tags = weenet_combine_tags(WMSG_RIDX_LOG, 0, 0);
+			weenet_process_push(L, 0, 0, tags, (uintptr_t)ptr, (uintptr_t)len);
 		} else {
 			weenet_process_push(L, 0, 0, 0, (uintptr_t)e_format, (uintptr_t)(sizeof(e_format)-1));
 		}
@@ -274,7 +283,8 @@ _vprintf(const char *prefix, size_t prelen, const char *fmt, va_list args) {
 	} else {
 		memcpy(ptr+prelen, buf, len);
 	}
-	weenet_process_push(L, 0, 0, WMESSAGE_RIDX_LOG, (uintptr_t)ptr, (uintptr_t)size);
+	uint32_t tags = weenet_combine_tags(WMSG_RIDX_LOG, 0, 0);
+	weenet_process_push(L, 0, 0, tags, (uintptr_t)ptr, (uintptr_t)size);
 }
 
 void

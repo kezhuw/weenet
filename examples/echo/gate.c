@@ -25,7 +25,8 @@ gate_new(struct weenet_process *p, const char *address) {
 	g->listener = listener;
 	memcpy(g->address, address, len+1);
 
-	weenet_process_push(listener, self, 0, WMESSAGE_TYPE_TEXT|WMESSAGE_RIDX_PROC, (uintptr_t)weenet_process_retain(p), 0);
+	uint32_t tags = weenet_combine_tags(WMSG_RIDX_PROC, 0, WMSG_CODE_TEXT);
+	weenet_process_push(listener, self, 0, tags, (uintptr_t)weenet_process_retain(p), 0);
 	weenet_process_monitor(listener);
 	weenet_process_release(listener);
 
@@ -40,13 +41,13 @@ gate_delete(struct gate *g) {
 static int
 gate_handle(struct gate *g, struct weenet_process *p, struct weenet_message *m) {
 	(void)p;
-	uint32_t type = weenet_message_type(m);
-	switch (type) {
-	case WMESSAGE_TYPE_RETIRED:
+	uint32_t code = weenet_message_code(m);
+	switch (code) {
+	case WMSG_CODE_RETIRED:
 		g->listener = NULL;
-		weenet_logger_errorf("listern(%d) unexpected retired!\n", g->address);
+		weenet_logger_errorf("listern(%s) unexpected retired!\n", g->address);
 		break;
-	case WMESSAGE_TYPE_FILE:
+	case WMSG_CODE_FILE:
 		weenet_message_take(m);
 		int fd = (int)m->data;
 		struct weenet_process *agent = weenet_process_new("agent", (uintptr_t)fd, 0);
@@ -66,7 +67,8 @@ gate_handle(struct gate *g, struct weenet_process *p, struct weenet_message *m) 
 		//	return -1;
 		//}
 		//// XXX Prefered to send file message ?
-		//// weenet_process_push(agent, g->self, 0, WMESSAGE_TYPE_FILE, (uintptr_t)fd, 0);
+		//// uint32_t tags = weenet_combine_tags(WMSG_RIDX_FILE, 0, WMSG_CODE_FILE);
+		//// weenet_process_push(agent, g->self, 0, tags, (uintptr_t)fd, 0);
 		//weenet_process_release(agent);
 		break;
 	default:
