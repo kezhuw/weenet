@@ -196,7 +196,8 @@ _accept(struct listener *l, int fd) {
 		if (_noblocking(conn) == -1) {
 			weenet_logger_fatalf("set noblocking mode failed: %s\n", strerror(errno));
 		}
-		weenet_process_push(l->forward, l->self, 0, WMESSAGE_TYPE_FILE|WMESSAGE_RIDX_FILE, (uintptr_t)conn, 0);
+		uint32_t tags = weenet_combine_tags(WMSG_RIDX_FILE, WMSG_KIND_NOTIFY, WMSG_CODE_FILE);
+		weenet_process_push(l->forward, l->self, 0, tags, (uintptr_t)conn, 0);
 	}
 	return 0;
 }
@@ -234,9 +235,9 @@ listener_delete(struct listener *l) {
 static int
 listener_handle(struct listener *l, struct weenet_process *p, struct weenet_message *m) {
 	(void)p;
-	uint32_t type = weenet_message_type(m);
-	switch (type) {
-	case WMESSAGE_TYPE_TEXT:
+	uint32_t code = weenet_message_code(m);
+	switch (code) {
+	case WMSG_CODE_TEXT:
 		;struct weenet_process *forward = (void*)m->data;
 		if (l->monitor != 0) {
 			l->monitor = 0;
@@ -251,17 +252,18 @@ listener_handle(struct listener *l, struct weenet_process *p, struct weenet_mess
 		if (forward != NULL) {
 			l->monitor = weenet_process_monitor(forward);
 		}
-		if ((m->tags & WMESSAGE_FLAG_REQUEST)) {
-			weenet_process_send(m->source, l->self, m->session, WMESSAGE_FLAG_RESPONSE, 0, 0);
+		if (m->session != 0 && m->tags.kind == WMSG_KIND_REQUEST) {
+			uint32_t tags = weenet_combine_tags(0, WMSG_KIND_RESPONSE, 0);
+			weenet_process_send(m->source, l->self, m->session, tags, 0, 0);
 		}
 		break;
-	case WMESSAGE_TYPE_RETIRED:
+	case WMSG_CODE_RETIRED:
 		assert(l->monitor == (monitor_t)m->meta && l->forward == (void*)m->data);
 		l->monitor = 0;
 		l->forward = NULL;
 		_monitor(l, WEVENT_DELETE);
 		break;
-	case WMESSAGE_TYPE_EVENT:
+	case WMSG_CODE_EVENT:
 		if (l->forward == NULL) return 0;
 		int fd = (int)m->data;
 		return _accept(l, fd);

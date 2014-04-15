@@ -20,10 +20,13 @@
 #include <stdbool.h>
 #include <unistd.h>	// for close()
 
-enum {
-	WMESSAGE_TAGS_MONITOR		= WMESSAGE_TYPE_MONITOR | WMESSAGE_FLAG_INTERNAL,
-	WMESSAGE_TAGS_RETIRED		= WMESSAGE_TYPE_RETIRED | WMESSAGE_RIDX_PROC | WMESSAGE_FLAG_INTERNAL,
+enum wmessage_flag {
+	WMSG_FLAG_INTERNAL		= 0x01,
+	WMSG_FLAG_MIGRATED		= 0x02,	// resource ownership migrated to other
 };
+
+static const union message_tags WMSG_TAGS_MONITOR	= {.code = WMSG_CODE_MONITOR, .flag = WMSG_FLAG_INTERNAL};
+static const union message_tags WMSG_TAGS_RETIRED	= {.ridx = WMSG_RIDX_PROC, .code = WMSG_CODE_RETIRED, .flag = WMSG_FLAG_INTERNAL};
 
 struct weenet_mailbox {
 	uint32_t num;
@@ -98,28 +101,30 @@ static struct {
 	struct {
 		void *ud;
 		resource_fini_t fn;
-	} pairs[WMESSAGE_RIDX_MASK+1];
+	} pairs[WMSG_RIDX_MASK+1];
 } F;
 
-#define _ridx(tags)		((tags) & WMESSAGE_RIDX_MASK)
-#define _migrated(tags)		((tags) & WMESSAGE_FLAG_MIGRATED)
-
 static void
-_reclaim_resource(uint32_t tags, uintptr_t data, uintptr_t meta) {
-	if (_migrated(tags)) {
-		return;
-	}
-	uint32_t ridx = _ridx(tags);
+_free_resource(uint32_t ridx, uintptr_t data, uintptr_t meta) {
 	resource_fini_t fn = F.pairs[ridx].fn;
 	if (fn != NULL) {
 		fn(F.pairs[ridx].ud, data, meta);
 	}
 }
 
+static void
+_reclaim_resource(uint32_t tags, uintptr_t data, uintptr_t meta) {
+	union message_tags t = {.value = tags};
+	if ((t.flag & WMSG_FLAG_MIGRATED)) {
+		return;
+	}
+	_free_resource(t.ridx, data, meta);
+}
+
 int
-weenet_message_gc(uint32_t id, void *ud, resource_fini_t fn) {
+weenet_message_gc(uint8_t id, void *ud, resource_fini_t fn) {
 	if (id == 0) return EINVAL;
-	if (id > WMESSAGE_RIDX_MASK) return ERANGE;
+	if (id > WMSG_RIDX_MASK) return ERANGE;
 	// Sufficent to protect (ud, fn) pair in F.
 	//
 	// In a single process, registration happens before
@@ -137,21 +142,21 @@ weenet_message_new(process_t source, process_t session, uint32_t tags, uintptr_t
 	msg->session = session;
 	msg->data = data;
 	msg->meta = meta;
-	msg->tags = tags;
+	msg->tags.value = tags;
 	msg->refcnt = 1;
 	return msg;
 }
 
 void
 weenet_message_delete(struct weenet_message *m) {
-	_reclaim_resource(m->tags, m->data, m->meta);
+	_reclaim_resource(m->tags.value, m->data, m->meta);
 	slab_release(message_slab, m);
 }
 
 // XXX Multicast message may exist race condition ?
 void
 weenet_message_take(struct weenet_message *msg) {
-	msg->tags |= WMESSAGE_FLAG_MIGRATED;
+	msg->tags.flag |= WMSG_FLAG_MIGRATED;
 }
 
 struct weenet_message *
@@ -161,17 +166,16 @@ weenet_message_ref(struct weenet_message *msg) {
 }
 
 void
-weenet_message_copy(struct weenet_message *msg, int n) {
-	int32_t refcnt = weenet_atomic_add(&msg->refcnt, n);
-	assert(refcnt >= 0);
-	if (refcnt == 0) {
-		weenet_message_delete(msg);
-	}
+weenet_message_copy(struct weenet_message *msg, unsigned n) {
+	weenet_atomic_add(&msg->refcnt, (int32_t)n);
 }
 
 void
 weenet_message_unref(struct weenet_message *msg) {
-	weenet_message_copy(msg, -1);
+	int32_t refcnt = weenet_atomic_sub(&msg->refcnt, 1);
+	if (refcnt == 0) {
+		weenet_message_delete(msg);
+	}
 }
 
 // Notify supervisors that 'p' is about to be deleted.
@@ -186,7 +190,7 @@ weenet_monitor_notify(struct weenet_monitor *m, struct weenet_process *p) {
 		process_t self = _pid(p);
 		for (uintreg_t i=0; i<n; ++i) {
 			process_t pid = (process_t)monitors[i].pref;
-			weenet_process_send(pid, self, 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)p, monitors[i].mref);
+			weenet_process_send(pid, self, 0, WMSG_TAGS_RETIRED.value, (uintptr_t)p, monitors[i].mref);
 		}
 	}
 	if (monitors != NULL) {
@@ -241,7 +245,7 @@ weenet_monitor_unlink(struct weenet_monitor *m, struct weenet_process *p) {
 	uint32_t n = m->num;
 	for (uint32_t i=0; i<n; ++i) {
 		struct weenet_process *dst = (struct weenet_process *)m->monitors[i].pref;
-		weenet_process_push(dst, _pid(p), 0, WMESSAGE_TAGS_MONITOR, 0, (uintptr_t)m->monitors[i].mref);
+		weenet_process_push(dst, _pid(p), 0, WMSG_TAGS_MONITOR.value, 0, (uintptr_t)m->monitors[i].mref);
 		weenet_process_release(dst);
 	}
 	wfree(m->monitors);
@@ -567,7 +571,8 @@ weenet_process_delete(struct weenet_process *p) {
 void
 weenet_process_retire(struct weenet_process *p) {
 	if (weenet_atomic_cas(&p->retired, false, true)) {
-		weenet_process_push(p, 0, 0, WMESSAGE_TYPE_RETIRED | WMESSAGE_FLAG_INTERNAL, 0, 0);
+		union message_tags tags = { .code = WMSG_CODE_RETIRED, .flag = WMSG_FLAG_INTERNAL };
+		weenet_process_push(p, 0, 0, tags.value, 0, 0);
 	}
 }
 
@@ -619,8 +624,17 @@ weenet_process_name(const struct weenet_process *p) {
 }
 
 struct weenet_process *
-weenet_process_self() {
+weenet_process_running() {
 	return _running_process();
+}
+
+process_t
+weenet_process_self() {
+	struct weenet_process *p = weenet_process_running();
+	if (p) {
+		return weenet_process_pid(p);
+	}
+	return 0;
 }
 
 static bool
@@ -628,22 +642,22 @@ weenet_process_work(struct weenet_process *p) {
 	struct weenet_message *msg = weenet_mailbox_pop(&p->mailbox);
 	if (msg == NULL) return false;
 
-	if ((msg->tags & WMESSAGE_FLAG_INTERNAL)) {
-		msg->tags &= ~(uint32_t)WMESSAGE_FLAG_INTERNAL;
-		uint32_t type = weenet_message_type(msg);
-		switch (type) {
-		case WMESSAGE_TYPE_MONITOR:
+	if ((msg->tags.flag & WMSG_FLAG_INTERNAL)) {
+		// msg->tags.flag &= ~(uint32_t)WMSG_FLAG_INTERNAL;
+		uint32_t code = weenet_message_code(msg);
+		switch (code) {
+		case WMSG_CODE_MONITOR:
 			;monitor_t mref = (monitor_t)msg->meta;
 			if (msg->data == 0) {
 				weenet_monitor_remove(&p->supervisors, mref, (uintptr_t)msg->source);
 			} else if (weenet_atomic_get(&p->retired) == true) {
 				weenet_process_retain(p);
-				weenet_process_send(msg->source, _pid(p), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)p, mref);
+				weenet_process_send(msg->source, _pid(p), 0, WMSG_TAGS_RETIRED.value, (uintptr_t)p, mref);
 			} else {
 				weenet_monitor_insert(&p->supervisors, mref, (uintptr_t)msg->source);
 			}
 			break;
-		case WMESSAGE_TYPE_RETIRED:
+		case WMSG_CODE_RETIRED:
 			if (msg->source == 0) {	// send by weenet_process_retire()
 				// 'p' is retired, no more lock need.
 				assert(p->retired == true);
@@ -658,7 +672,7 @@ weenet_process_work(struct weenet_process *p) {
 			}
 			break;
 		default:
-			weenet_logger_fatalf("unexpected internal message type[%d]", type);
+			weenet_logger_fatalf("unexpected internal message code[%d]", code);
 			break;
 		}
 		weenet_message_unref(msg);
@@ -675,10 +689,10 @@ weenet_process_wait(struct weenet_process *p, session_t sid) {
 	p->wait.session = sid;
 }
 
-// XXX Exported API should check invalid WMESSAGE_FLAG_INTERNAL message.
+// XXX Exported API should check invalid WMSG_FLAG_INTERNAL message.
 void
 weenet_process_mail(struct weenet_process *p, struct weenet_message *m) {
-	if (p->wait.session != 0 && p->wait.session == m->session && (m->tags & WMESSAGE_FLAG_RESPONSE)) {
+	if (p->wait.session != 0 && p->wait.session == m->session && m->tags.kind == WMSG_KIND_REQUEST) {
 		p->wait.session = 0;
 		weenet_mailbox_insert(&p->mailbox, m);
 		weenet_schedule_resume(p);
@@ -717,21 +731,54 @@ weenet_process_call(struct weenet_process *p, process_t dst, uint32_t tags, uint
 	session_t sid = weenet_process_sid(p);
 	weenet_process_wait(p, sid);
 	process_t src = weenet_process_pid(p);
-	weenet_process_push(out, src, sid, tags | WMESSAGE_FLAG_REQUEST, data, meta);
+	union message_tags t = { .value = tags };
+	t.kind = WMSG_KIND_REQUEST;
+	weenet_process_push(out, src, sid, t.value, data, meta);
 	weenet_process_release(out);
 	return sid;
 }
 
-int
+bool
 weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t tags, uintptr_t data, uintptr_t meta) {
 	struct weenet_process *out = weenet_account_retain(dst);
 	if (out == NULL) {
 		_reclaim_resource(tags, data, meta);
-		return -1;
+		return false;
 	}
 	weenet_process_push(out, src, sid, tags, data, meta);
 	weenet_process_release(out);
-	return 0;
+	return true;
+}
+
+session_t
+weenet_process_request(process_t pid, uint32_t ridx, uint32_t code, uintptr_t data, uintptr_t meta) {
+	struct weenet_process *out = weenet_account_retain(pid);
+	if (out == NULL) {
+		_free_resource(ridx, data, meta);
+		return 0;
+	}
+	struct weenet_process *self = weenet_process_running();
+	assert(self != NULL);
+	process_t source = weenet_process_pid(self);
+	session_t session = weenet_process_sid(self);
+	uint32_t tags = weenet_combine_tags(ridx, WMSG_KIND_REQUEST, code);
+	weenet_process_push(out, source, session, tags, data, meta);
+	weenet_process_release(out);
+	return session;
+}
+
+bool
+weenet_process_notify(process_t pid, uint32_t ridx, uint32_t code, uintptr_t data, uintptr_t meta) {
+	uint32_t tags = weenet_combine_tags(ridx, WMSG_KIND_NOTIFY, code);
+	process_t self = weenet_process_self();
+	return weenet_process_send(pid, self, 0, tags, data, meta);
+}
+
+bool
+weenet_process_response(process_t pid, session_t session, uint32_t ridx, uint32_t code, uintptr_t data, uintptr_t meta) {
+	uint32_t tags = weenet_combine_tags(ridx, WMSG_KIND_RESPONSE, code);
+	process_t self = weenet_process_self();
+	return weenet_process_send(pid, self, session, tags, data, meta);
 }
 
 bool
@@ -748,9 +795,9 @@ weenet_process_forward(process_t dst, struct weenet_message *m) {
 
 session_t
 weenet_process_timeout(uint64_t msecs, uintreg_t flag) {
-	struct weenet_process *self = weenet_process_self();
-	process_t pid = weenet_process_pid(self);
-	session_t session = (flag & WMESSAGE_FLAG_REQUEST) ? weenet_process_sid(self) : 0;
+	struct weenet_process *p = weenet_process_running();
+	process_t pid = weenet_process_pid(p);
+	session_t session = (flag == WMSG_KIND_REQUEST) ? weenet_process_sid(p) : 0;
 	weenet_timeout(pid, session, msecs);
 	return session;
 }
@@ -779,9 +826,9 @@ weenet_process_monitor(struct weenet_process *p) {
 
 	bool retired = weenet_atomic_get(&p->retired);
 	if (retired) {
-		weenet_process_push(self, _pid(p), 0, WMESSAGE_TAGS_RETIRED, (uintptr_t)_ref(p), (uintptr_t)mref);
+		weenet_process_push(self, _pid(p), 0, WMSG_TAGS_RETIRED.value, (uintptr_t)_ref(p), (uintptr_t)mref);
 	} else {
-		weenet_process_push(p, _pid(self), 0, WMESSAGE_TAGS_MONITOR, 1, (uintptr_t)mref);
+		weenet_process_push(p, _pid(self), 0, WMSG_TAGS_MONITOR.value, 1, (uintptr_t)mref);
 	}
 	return mref;
 }
@@ -791,7 +838,7 @@ weenet_process_demonitor(monitor_t mref) {
 	struct weenet_process *self = _running_process();
 	struct weenet_process *p = weenet_monitor_erase(&self->supervisees, mref);
 	if (p != NULL) {
-		weenet_process_push(p, _pid(self), 0, WMESSAGE_TAGS_MONITOR, 0, mref);
+		weenet_process_push(p, _pid(self), 0, WMSG_TAGS_MONITOR.value, 0, mref);
 		weenet_process_release(p);
 	}
 }
@@ -800,10 +847,10 @@ int
 weenet_init_process() {
 	process_slab = slab_new(1024, sizeof(struct weenet_process));
 	message_slab = slab_new(10240, sizeof(struct weenet_message));
-	weenet_message_gc(WMESSAGE_RIDX_FILE, NULL, _file_resource_release);
-	weenet_message_gc(WMESSAGE_RIDX_PROC, NULL, _process_resource_release);
-	weenet_message_gc(WMESSAGE_RIDX_RAWMEM, NULL, _rawmem_resource_release);
-	weenet_message_gc(WMESSAGE_RIDX_MEMORY, NULL, _memory_resource_release);
+	weenet_message_gc(WMSG_RIDX_FILE, NULL, _file_resource_release);
+	weenet_message_gc(WMSG_RIDX_PROC, NULL, _process_resource_release);
+	weenet_message_gc(WMSG_RIDX_RAWMEM, NULL, _rawmem_resource_release);
+	weenet_message_gc(WMSG_RIDX_MEMORY, NULL, _memory_resource_release);
 	T = wcalloc(sizeof(*T));
 	T->free.first = -1;
 	T->size = 65536;

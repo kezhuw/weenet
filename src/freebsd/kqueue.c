@@ -4,12 +4,6 @@
 
 static int kqfd = -1;
 
-inline static void
-_send(process_t pid, session_t session, uintptr_t fd, uintptr_t event) {
-	uint32_t flag = session == 0 ? 0 : WMESSAGE_FLAG_RESPONSE;
-	weenet_process_send(pid, 0, session, WMESSAGE_TYPE_EVENT|flag, fd, event);
-}
-
 static void *
 _poll(void *arg) {
 	pthread_detach(pthread_self());
@@ -43,7 +37,7 @@ _poll(void *arg) {
 				event = WEVENT_WRITE;
 			} else {
 				weenet_logger_fatalf(
-					"unexpected kevent result: ident(%llu) filter(%d) flags(%d) fflags(%u) data(%lld).\n",
+					"unexpected kevent result: ident(%lu) filter(%d) flags(%d) fflags(%u) data(%ld).\n",
 					ev->ident, (int)ev->filter, (int)ev->flags, (unsigned)ev->fflags, ev->data);
 				continue;
 			}
@@ -104,12 +98,11 @@ weenet_event_monitor(process_t source, session_t session, int fd, int op, int ev
 	default:
 		return EINVAL;
 	}
-	if ((event & WEVENT_ONESHOT)) {
-		op |= EV_ONESHOT;
-	} else if ((event & WEVENT_DISPATCH)) {
-		op |= EV_DISPATCH;
-	}
+
 	op |= EV_CLEAR;
+	if (session != 0) {
+		op |= EV_ONESHOT;
+	}
 
 	void *udata = (void*)((uintptr_t)source | ((uintptr_t)session << 32));
 	struct kevent ev;

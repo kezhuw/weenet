@@ -21,7 +21,7 @@
 //	bool cancel;
 // };
 //
-// Store in 'data' field of weenet_message with resource id 'WMESSAGE_RIDX_TIMER' ?
+// Store in 'data' field of weenet_message with resource id 'WMSG_RIDX_TIMER' ?
 // Need helpness from message dispatcher.
 //
 // OR
@@ -103,8 +103,9 @@ _free_node(struct timer *t, struct node *n) {
 
 inline static void
 _send(process_t pid, session_t sid) {
-	uint32_t flag = sid == 0 ? 0 : WMESSAGE_FLAG_RESPONSE;
-	weenet_process_send(pid, 0, sid, WMESSAGE_TYPE_TIMEO | flag, 0, 0);
+	uint32_t kind = sid == 0 ? WMSG_KIND_NOTIFY : WMSG_KIND_RESPONSE;
+	uint32_t tags = weenet_combine_tags(0, kind, WMSG_CODE_TIMEO);
+	weenet_process_send(pid, 0, sid, tags, 0, 0);
 }
 
 static uint64_t
@@ -221,19 +222,20 @@ _new() {
 }
 
 enum {
-	TAGS_UPDATE_TIME	= (uint32_t)WMESSAGE_TYPE_UDEF_START,
-	TAGS_REQUEST_TIMEOUT	= (uint32_t)WMESSAGE_TYPE_UDEF_STOP,
+	WMSG_CODE_UPDATE_TIME		= WMSG_CODE_UDEF_START,
+	WMSG_CODE_REQUEST_TIMEOUT	= WMSG_CODE_UDEF_STOP,
 };
 
 static int
 _handle(struct timer *t, struct weenet_process *p, struct weenet_message *m) {
 	(void)p;
 	uint64_t time = (uint64_t)m->data;
-	switch (m->tags) {
-	case TAGS_UPDATE_TIME:
+	uint32_t code = weenet_message_code(m);
+	switch (code) {
+	case WMSG_CODE_UPDATE_TIME:
 		_update(t, time);
 		break;
-	case TAGS_REQUEST_TIMEOUT:
+	case WMSG_CODE_REQUEST_TIMEOUT:
 		_timeout(t, time, m->source, m->session);
 		break;
 	default:
@@ -280,7 +282,8 @@ weenet_realtime() {
 
 void
 weenet_timeout(process_t source, session_t session, uint64_t timeout) {
-	weenet_process_push(TIMER_SERVICE, source, session, TAGS_REQUEST_TIMEOUT, (uintptr_t)timeout, 0);
+	uint32_t tags = weenet_combine_tags(0, 0, WMSG_CODE_REQUEST_TIMEOUT);
+	weenet_process_push(TIMER_SERVICE, source, session, tags, (uintptr_t)timeout, 0);
 }
 
 uint64_t
@@ -290,7 +293,8 @@ weenet_update_time() {
 	uint64_t time = now - STARTTIME;
 	if (time > TIME) {
 		TIME = time;
-		weenet_process_push(TIMER_SERVICE, 0, 0, TAGS_UPDATE_TIME, (uintptr_t)time, 0);
+		uint32_t tags = weenet_combine_tags(0, 0, WMSG_CODE_UPDATE_TIME);
+		weenet_process_push(TIMER_SERVICE, 0, 0, tags, (uintptr_t)time, 0);
 	}
 	return TIME;
 }
