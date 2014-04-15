@@ -26,20 +26,20 @@ client_delete(struct client *e) {
 
 static int
 client_handle(struct client *e, struct weenet_process *p, struct weenet_message *m) {
-	uint32_t type = weenet_message_type(m);
-	switch (type) {
-	case WMESSAGE_TYPE_RETIRED:
+	uint32_t code = weenet_message_code(m);
+	switch (code) {
+	case WMSG_CODE_RETIRED:
 		assert(e->agent != NULL);
 		e->agent = NULL;
 		weenet_process_retire(p);
 		break;
-	case WMESSAGE_TYPE_CLIENT:
+	case WMSG_CODE_CLIENT:
 		;size_t size = (size_t)m->meta;
 		if (size == 0) {
 			weenet_process_retire(p);
 		} else if (e->agent != NULL) {
 			weenet_message_take(m);
-			uint32_t tags = WMESSAGE_TYPE_CLIENT | WMESSAGE_RIDX_MEMORY;
+			uint32_t tags = weenet_combine_tags(WMSG_RIDX_MEMORY, 0, WMSG_CODE_CLIENT);
 			weenet_process_push(e->agent, weenet_process_pid(p), 0, tags, m->data, m->meta);
 		}
 		break;

@@ -76,7 +76,8 @@ _send(struct agent *g, byte_t *buf, size_t len) {
 		ptr = wmalloc(len);
 		memcpy(ptr, buf, len);
 	}
-	weenet_process_push(g->client, g->self, 0, WMESSAGE_TYPE_CLIENT | WMESSAGE_RIDX_MEMORY, (uintptr_t)ptr, (uintptr_t)len); 
+	uint32_t tags = weenet_combine_tags(WMSG_RIDX_MEMORY, 0, WMSG_CODE_CLIENT);
+	weenet_process_push(g->client, g->self, 0, tags, (uintptr_t)ptr, (uintptr_t)len);
 }
 
 #undef EEOF
@@ -109,7 +110,8 @@ _read(int fd, byte_t *buf, size_t len, int *err) {
 static void
 _read_closed(struct agent *g) {
 	weenet_event_monitor(g->self, 0, g->fd, WEVENT_DELETE, WEVENT_READ);
-	weenet_process_push(g->client, g->self, 0, WMESSAGE_TYPE_CLIENT, 0, 0);
+	uint32_t tags = weenet_combine_tags(0, 0, WMSG_CODE_CLIENT);
+	weenet_process_push(g->client, g->self, 0, tags, 0, 0);
 }
 
 static int
@@ -142,13 +144,13 @@ _event_read(struct agent *g, struct weenet_process *p) {
 
 static int
 agent_handle(struct agent *g, struct weenet_process *p, struct weenet_message *m) {
-	uint32_t type = weenet_message_type(m);
-	switch (type) {
-	case WMESSAGE_TYPE_RETIRED:
+	uint32_t code = weenet_message_code(m);
+	switch (code) {
+	case WMSG_CODE_RETIRED:
 		g->client = NULL;
 		weenet_process_retire(p);	// retire gate self
 		break;
-	case WMESSAGE_TYPE_EVENT:
+	case WMSG_CODE_EVENT:
 		if (g->client == NULL) break;
 		uintreg_t event = (uintreg_t)m->meta;
 		switch (event) {
@@ -166,7 +168,7 @@ agent_handle(struct agent *g, struct weenet_process *p, struct weenet_message *m
 			break;
 		}
 		break;
-	case WMESSAGE_TYPE_CLIENT:
+	case WMSG_CODE_CLIENT:
 		;int err = socket_buffer_write(g->socket_buffer, m);
 		if (err != 0) {
 			weenet_logger_errorf("write(%d) failed(%s)", g->fd, strerror(err));

@@ -107,10 +107,9 @@ _new(struct storage *g, uint32_t h, const char *str, size_t len) {
 
 inline static uint32_t
 _hash(const char *str, size_t len) {
-	uint32_t hash = SEED;
-	size_t n = (len < 0x10) ? len : 0x10;
-	for (size_t i=0; i<n; ++i) {
-		hash += (uint32_t)(unsigned char)str[i];
+	uint32_t hash = SEED ^ (uint32_t)len;
+	for (size_t step = (len>>5) + 1; len >= step; len -= step) {
+		hash = hash ^ ((hash<<5) + (hash>>2) + (uint32_t)str[len-1]);
 	}
 	return hash;
 }
