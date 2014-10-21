@@ -285,7 +285,20 @@ lua_new(struct weenet_process *p, const char *name) {
 	lua_setglobal(L, "SERVICE_FILENAME");
 
 	const char *filepath = lua_tostring(L, -2);
-	err = lua_pcall(L, 0, 0, 1);
+
+	const char *template =
+		"local weenet = require \"weenet\"\n"
+		"weenet.start(...)\n"
+		"weenet.start = nil\n";
+	err = luaL_loadstring(L, template);
+	if (err != LUA_OK) {
+		weenet_logger_errorf("fail to load template code: %s", lua_tostring(L, -1));
+		lua_close(L);
+		return NULL;
+	}
+	lua_insert(L, -2);
+
+	err = lua_pcall(L, 1, 0, 1);
 	if (err != LUA_OK) {
 		weenet_logger_errorf("lua service[%s file(%s)] fail to call: %s", name, filepath, lua_tostring(L, -1));
 		lua_close(L);

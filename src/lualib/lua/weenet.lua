@@ -419,28 +419,17 @@ local function dispatch_message(source, session, kind, code, data, meta)
     schedule()
 end
 
-local function init(start)
-    if start ~= nil then
-        local ok, err = pcall(start)
+function weenet.start(func, ...)
+    local session = c.bootstrap()
+    block_coroutines[session] = new_coroutine(function(...)
+        local ok, err = pcall(func, ...)
         if not ok then
             log.errorf("service[%s] failed to start: %s", weenet.name(), err)
-            return weenet.exit()
+            weenet.exit()
         end
-    end
+    end)
 end
 
-local function bootstrap(fn)
-    if fn ~= nil then
-        local session = c.bootstrap()
-        block_coroutines[session] = new_coroutine(function()
-            init(fn)
-        end)
-    end
-end
-
-function weenet.start(func)
-    bootstrap(func)
-    c.callback(dispatch_message)
-end
+c.callback(dispatch_message)
 
 return weenet

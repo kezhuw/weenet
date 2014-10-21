@@ -20,13 +20,7 @@ local function client(name, addr)
     end
 end
 
-local function main()
-    weenet.sleep(500)   -- let server start first
-    weenet.spawn(client, "client tcp", "tcp://*:4444")
-    weenet.spawn(client, "client tcp4", "tcp4://*:4444")
-    weenet.spawn(client, "client tcp6", "tcp6://*:4444")
-end
-
-weenet.start(function()
-    weenet.spawn(main)
-end)
+weenet.sleep(500)   -- let server start first
+weenet.spawn(client, "client tcp", "tcp://*:4444")
+weenet.spawn(client, "client tcp4", "tcp4://*:4444")
+weenet.spawn(client, "client tcp6", "tcp6://*:4444")

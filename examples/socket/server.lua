@@ -14,20 +14,15 @@ local function echo(fd)
     end
 end
 
-local function main()
-    local listener, err = socket.listen("tcp4://*:4444")
-    if err then
-        error("fail to listen: " .. err)
-    end
-    while true do
-        local fd, err = socket.accept(listener)
-        if err then
-            error("fail to accept: " .. err)
-        end
-        weenet.spawn(echo, fd)
-    end
+local listener, err = socket.listen("tcp4://*:4444")
+if err then
+    error("fail to listen: " .. err)
 end
 
-weenet.start(function()
-    weenet.spawn(main)
-end)
+while true do
+    local fd, err = socket.accept(listener)
+    if err then
+        error("fail to accept: " .. err)
+    end
+    weenet.spawn(echo, fd)
+end

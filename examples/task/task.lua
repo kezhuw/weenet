@@ -39,19 +39,10 @@ local function do_write()
     print("Done: write")
 end
 
-local function main()
-    print("in main")
-    local reader = weenet.task(do_read)
-    local writer = weenet.task(do_write)
-    weenet.join(reader)
-    weenet.join(writer)
-    print("Done: main")
-    weenet.exit()
-end
-
-print("execing ...")
-
-weenet.start(function()
-    print("starting ...");
-    weenet.spawn(main)
-end)
+print("in main")
+local reader = weenet.task(do_read)
+local writer = weenet.task(do_write)
+weenet.join(reader)
+weenet.join(writer)
+print("Done: main")
+weenet.exit()
