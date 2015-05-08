@@ -77,29 +77,41 @@ end
 
 -- lock {
 
-local lock_queue = {}
+local lock_objs = {}
 
 function weenet.lock(obj)
     local self = coroutine.running()
-    local queue = lock_queue[obj]
-    if queue == nil then
-        queue = {}
-        lock_queue[obj] = queue
+    local locker = lock_objs[obj]
+    if locker == nil then
+        locker = {}
+        lock_objs[obj] = locker
     end
-    table.insert(queue, self)
-    if #queue ~= 1 then
+    if locker.thread == nil then
+        locker.thread = self
+        locker.nested = 1
+    elseif locker.thread == self then
+        locker.nested = locker.nested + 1
+    else
+        table.insert(locker, self)
         weenet.suspend("WAIT LOCKER")
+        assert(locker.thread == self)
+        assert(locker.nested == 1)
     end
-    assert(self == queue[1], "erroneous lock algorithm")
 end
 
 function weenet.unlock(obj)
-    local self = coroutine.running()
-    local queue = lock_queue[obj]
-    assert(self == queue[1], "unlock non-owned locker")
-    table.remove(queue, 1)
-    if #queue ~= 0 then
-        weenet.wakeup(queue[1])
+    local locker = lock_objs[obj]
+    assert(locker.thread == coroutine.running(), "try to unlock non-owned locker")
+    if locker.nested == 1 then
+        local thread = table.remove(locker, 1)
+        if thread then
+            locker.thread = thread
+            weenet.wakeup(thread)
+        else
+            lock_objs[obj] = nil
+        end
+    else
+        locker.nested = locker.nested - 1
     end
 end
 
