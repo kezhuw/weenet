@@ -31,10 +31,6 @@ local KIND_INTEGERS = {
 
 local weenet = { }
 
-local function pcall(f, ...)
-    return xpcall(f, debug.traceback, ...)
-end
-
 local coroutine_pool = {}
 
 -- coroutine indexed table, values:
