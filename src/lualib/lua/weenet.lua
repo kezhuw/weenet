@@ -279,18 +279,6 @@ function weenet.error(err)
     print(weenet.name() .. err)
 end
 
-local message_queue = {}
-local message_coroutines = {}
-local waiting_coroutines = {}
-
-local function next_message(co)
-    if #message_queue == 0 then
-        table.insert(waiting_coroutines, co)
-        weenet.suspend()
-    end
-    return table.remove(message_queue, 1)
-end
-
 local function handle_message(func, kind, proto, source, session, ...)
     local co = coroutine.running()
     session_coroutine_address[co] = source
@@ -303,22 +291,6 @@ local function handle_message(func, kind, proto, source, session, ...)
     session_coroutine_address[co] = nil
     session_coroutine_session[co] = nil
     session_coroutine_protocol[co] = nil
-end
-
-local function do_work()
-    local co = coroutine.running()
-    while true do
-        local msg = assert(next_message(co))
-        handle_message(msg.func, msg.kind, msg.proto, msg.source, msg.session, table.unpack(msg))
-    end
-end
-
-local function coroutine_dead(co)
-    if message_coroutines[co] then
-        message_coroutines[co] = nil
-        local co = weenet.spawn(do_work)
-        message_coroutines[co] = true
-    end
 end
 
 local function trace(co, ok, status, session, ...)
@@ -334,8 +306,6 @@ local function trace(co, ok, status, session, ...)
         session_coroutine_address[co] = nil
         session_coroutine_session[co] = nil
         session_coroutine_protocol[co] = nil
-
-        coroutine_dead(co)
         return
     end
     if status == "REQUEST" then
@@ -384,16 +354,6 @@ local function unknown_response(source, session, code)
     weenet.error(string.format("unknown response: from[%d] session[%d] code[%d]", source, session, code))
 end
 
-local dispatch_mode
-
-function weenet.mode(mode)
-    dispatch_mode = mode
-    if mode == "queue" and next(message_coroutines) == nil then
-        local co = weenet.spawn(do_work)
-        message_coroutines[co] = true
-    end
-end
-
 local queue_mt = {
     __metatable = "don't change it",
 }
@@ -427,23 +387,7 @@ local function dispatch_message(source, session, kind, code, data, meta)
         local proto = assert(PROTOCOLS[code], "unknown message")
         local msg = assert(proto[kind], "unsupported message kind")
         local func = assert(msg.func, "no handler function registered")
-
-        if dispatch_mode == "queue" then
-            table.insert(message_queue, {
-                func = func,
-                kind = kind,
-                proto = proto,
-                address = source,
-                session = session,
-                msg.unpack(data, meta)
-            })
-            if #waiting_coroutines ~= 0 then
-                local co = table.remove(waiting_coroutines)
-                weenet.wakeup(co)
-            end
-        else
-            weenet.spawn(handle_message, func, kind, proto, source, session, msg.unpack(data, meta))
-        end
+        weenet.spawn(handle_message, func, kind, proto, source, session, msg.unpack(data, meta))
     end
     schedule()
 end
