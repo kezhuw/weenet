@@ -115,6 +115,14 @@ function weenet.unlock(obj)
     end
 end
 
+function weenet.with_lock(obj, f, ...)
+    weenet.lock(obj)
+    local results = table.pack(pcall(f, ...))
+    weenet.unlock(obj)
+    assert(results[1], results[2])
+    return select(2, table.unpack(results, 1, results.n))
+end
+
 -- } lock
 
 function weenet.self()
