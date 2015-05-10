@@ -394,6 +394,19 @@ function weenet.mode(mode)
     end
 end
 
+local queue_mt = {
+    __metatable = "don't change it",
+}
+
+function queue_mt:exec(f, ...)
+    return weenet.with_lock(self, f, ...)
+end
+
+function weenet.queue()
+    local q = {}
+    return setmetatable(q, queue_mt)
+end
+
 function weenet.abort(err)
     error(weenet.name() .. err)
 end
