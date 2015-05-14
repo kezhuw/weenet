@@ -56,20 +56,19 @@ local function coroutine_main(fn, ...)
             weenet.suspend("WAIT RESUME")
         end
         fn = nil
-        coroutine_pool[self] = true
+        table.insert(coroutine_pool, self)
         fn = coroutine.yield "ZOMBIE"
         args = {coroutine.yield()}
     end
 end
 
 local function new_coroutine(fn)
-    local co = next(coroutine_pool)
+    local co = table.remove(coroutine_pool)
     if co == nil then
         return coroutine.create(function(...)
             coroutine_main(fn, ...)
         end)
     else
-        coroutine_pool[co] = nil
         coroutine.resume(co, fn)
     end
     return co
