@@ -15,8 +15,8 @@ release0 : CFLAGS += -O3
 release0 : normal
 
 CC = clang
-CFLAGS = -std=c99 -Wall -Wextra -Wconversion
-LDFLAGS = -lpthread -llua5.2 -rdynamic
+CFLAGS = -std=c99 -I$(LUA_INC) -Wall -Wextra -Wconversion
+LDFLAGS = -lpthread -rdynamic
 
 include compat.mk
 
@@ -47,9 +47,16 @@ define SERVICE_SRC
 $(addprefix src/services/, $(addprefix $1/, $(addsuffix .c, $1)))
 endef
 
+LUA_DIR := deps/lua
+LUA_INC := deps/lua/src
+LUA_LIB := deps/lua/src/liblua.a
+
+$(LUA_LIB) :
+	$(MAKE) -C $(LUA_DIR) 'CC=$(CC)' $(PLAT)
+
 SRCS = atom.c compat.c event.c logger.c pipe.c memory.c process.c service.c slab.c main.c schedule.c timer.c socket_buffer.c
 
-$(WEENET_BIN) : $(addprefix src/, $(SRCS)) | $(BUILD)
+$(WEENET_BIN) : $(addprefix src/, $(SRCS)) $(LUA_LIB) | $(BUILD)
 	@echo "Building weenet ..."
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@ -Isrc
 	@echo "Done"
@@ -92,5 +99,6 @@ install : $(INSTALL_SERVICES_DIR) $(INSTALL_INCLUDES_DIR)
 
 clean :
 	rm -rf $(BUILD) $(LUA_CBINS)
+	$(MAKE) -C $(LUA_DIR) $@
 
 .PHONY : default normal debug release release0 clean

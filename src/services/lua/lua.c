@@ -5,9 +5,9 @@
 #include "process.h"
 #include "service.h"
 
-#include <lua5.2/lua.h>
-#include <lua5.2/lualib.h>
-#include <lua5.2/lauxlib.h>
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 
 #include <assert.h>
 #include <stdint.h>
@@ -40,7 +40,7 @@ static int
 _new_session(lua_State *L) {
 	struct weenet_process *p = _get_process(L);
 	session_t session = weenet_process_sid(p);
-	lua_pushunsigned(L, (lua_Unsigned)session);
+	lua_pushinteger(L, (lua_Integer)session);
 	return 1;
 }
 
@@ -56,15 +56,15 @@ static int
 _self(lua_State *L) {
 	struct weenet_process *p = _get_process(L);
 	process_t pid = weenet_process_pid(p);
-	lua_pushunsigned(L, (lua_Unsigned)pid);
+	lua_pushinteger(L, (lua_Integer)pid);
 	return 1;
 }
 
 static int
 _timeout(lua_State *L) {
-	uint64_t msecs = (uint64_t)luaL_checkunsigned(L, 1);
+	uint64_t msecs = (uint64_t)luaL_checkinteger(L, 1);
 	uint32_t session = weenet_process_timeout(msecs, WMSG_KIND_REQUEST);
-	lua_pushunsigned(L, (lua_Unsigned)session);
+	lua_pushinteger(L, (lua_Integer)session);
 	return 1;
 }
 
@@ -74,7 +74,7 @@ _bootstrap(lua_State *L) {
 	session_t session = weenet_process_sid(p);
 	uint32_t tags = weenet_combine_tags(0, WMSG_KIND_RESPONSE, 0);
 	weenet_process_push(p, weenet_process_pid(p), session, tags, 0, 0);
-	lua_pushunsigned(L, (lua_Unsigned)session);
+	lua_pushinteger(L, (lua_Integer)session);
 	return 1;
 }
 
@@ -84,7 +84,7 @@ _extract_data(lua_State *L, int idx, uint32_t *ridx, uintptr_t *data, uintptr_t 
 	case LUA_TUSERDATA:
 		*data = (uintptr_t)lua_touserdata(L, idx);
 		*meta = (uintptr_t)lua_touserdata(L, idx+1);
-		*ridx = (uint32_t)luaL_optunsigned(L, idx+2, 0);
+		*ridx = (uint32_t)luaL_optinteger(L, idx+2, 0);
 		break;
 	case LUA_TSTRING:
 		;size_t len;
@@ -106,21 +106,21 @@ _extract_data(lua_State *L, int idx, uint32_t *ridx, uintptr_t *data, uintptr_t 
 // local session = c.request(address, proto.code, proto.request.pack(...))
 static int
 _request(lua_State *L) {
-	process_t address = (process_t)luaL_checkunsigned(L, 1);
-	uint32_t code = (uint32_t)luaL_checkunsigned(L, 2);
+	process_t address = (process_t)luaL_checkinteger(L, 1);
+	uint32_t code = (uint32_t)luaL_checkinteger(L, 2);
 	uint32_t ridx = 0;
 	uintptr_t data, meta;
 	_extract_data(L, 3, &ridx, &data, &meta);
 	uint32_t session = weenet_process_request(address, ridx, code, data, meta);
-	lua_pushunsigned(L, (lua_Unsigned)session);
+	lua_pushinteger(L, (lua_Integer)session);
 	return 1;
 }
 
 static int
 _response(lua_State *L) {
-	process_t pid = (process_t)luaL_checkunsigned(L, 1);
-	session_t session = (session_t)luaL_checkunsigned(L, 2);
-	uint32_t code = (uint32_t)luaL_checkunsigned(L, 3);
+	process_t pid = (process_t)luaL_checkinteger(L, 1);
+	session_t session = (session_t)luaL_checkinteger(L, 2);
+	uint32_t code = (uint32_t)luaL_checkinteger(L, 3);
 	uint32_t ridx;
 	uintptr_t data, meta;
 	_extract_data(L, 4, &ridx, &data, &meta);
@@ -134,17 +134,17 @@ static int
 _send(lua_State *L) {
 	struct weenet_process *p = _get_process(L);
 
-	process_t address = (process_t)luaL_checkunsigned(L, 1);
+	process_t address = (process_t)luaL_checkinteger(L, 1);
 
 	session_t session;
 	if (lua_isnil(L, 2)) {
 		session = weenet_process_sid(p);
 	} else {
-		session = (session_t)luaL_checkunsigned(L, 3);
+		session = (session_t)luaL_checkinteger(L, 3);
 	}
 
-	uint32_t kind = (uint32_t)luaL_checkunsigned(L, 3);
-	uint32_t code = (uint32_t)luaL_checkunsigned(L, 4);
+	uint32_t kind = (uint32_t)luaL_checkinteger(L, 3);
+	uint32_t code = (uint32_t)luaL_checkinteger(L, 4);
 
 	if (session == 0 && kind == WMSG_KIND_REQUEST) {
 		session = weenet_process_sid(p);
@@ -157,7 +157,7 @@ _send(lua_State *L) {
 	uint32_t tags = weenet_combine_tags(ridx, kind, code);
 	weenet_process_send(address, weenet_process_pid(p), session, tags, data, meta);
 
-	lua_pushunsigned(L, (lua_Unsigned)session);
+	lua_pushinteger(L, (lua_Integer)session);
 	return 1;
 }
 
@@ -195,15 +195,15 @@ _index_message(lua_State *L) {
 	struct weenet_message *m = lua_touserdata(L, 1);
 	const char *key = luaL_checkstring(L, 2);
 	if (strcmp(key, "kind") == 0) {
-		lua_pushunsigned(L, (lua_Unsigned)m->tags.kind);
+		lua_pushinteger(L, (lua_Integer)m->tags.kind);
 		return 1;
 	}
 	if (strcmp(key, "source") == 0) {
-		lua_pushunsigned(L, (lua_Unsigned)m->source);
+		lua_pushinteger(L, (lua_Integer)m->source);
 		return 1;
 	}
 	if (strcmp(key, "session") == 0) {
-		lua_pushunsigned(L, (lua_Unsigned)m->session);
+		lua_pushinteger(L, (lua_Integer)m->session);
 		return 1;
 	}
 	if (strcmp(key, "content") == 0) {
@@ -328,10 +328,10 @@ lua_handle(struct lua *l, struct weenet_process *p, struct weenet_message *m) {
 
 	lua_rawgetp(L, LUA_REGISTRYINDEX, _callback);
 
-	lua_pushunsigned(L, (lua_Unsigned)m->source);
-	lua_pushunsigned(L, (lua_Unsigned)m->session);
-	lua_pushunsigned(L, (lua_Unsigned)m->tags.kind);
-	lua_pushunsigned(L, (lua_Unsigned)m->tags.code);
+	lua_pushinteger(L, (lua_Integer)m->source);
+	lua_pushinteger(L, (lua_Integer)m->session);
+	lua_pushinteger(L, (lua_Integer)m->tags.kind);
+	lua_pushinteger(L, (lua_Integer)m->tags.code);
 	lua_pushlightuserdata(L, (void*)m->data);
 	lua_pushlightuserdata(L, (void*)m->meta);
 

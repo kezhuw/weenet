@@ -3,9 +3,9 @@
 #include "process.h"
 #include "utils.h"
 
-#include <lua5.2/lua.h>
-#include <lua5.2/lualib.h>
-#include <lua5.2/lauxlib.h>
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -103,19 +103,19 @@ _get_process(lua_State *L) {
 }
 
 static int
-_yield_socket(lua_State *L, int fd, int event, int ctx, lua_CFunction k) {
+_yield_socket(lua_State *L, int fd, int event, lua_KContext ctx, lua_KFunction k) {
 	struct weenet_process *p = _get_process(L);
 	process_t self = weenet_process_pid(p);
 	session_t session = weenet_process_sid(p);
 	weenet_event_monitor(self, session, fd, WEVENT_ADD, event);
 	lua_pushliteral(L, "REQUEST");
-	lua_pushunsigned(L, (lua_Unsigned)session);
+	lua_pushinteger(L, (lua_Integer)session);
 	return lua_yieldk(L, 2, ctx, k);
 }
 
 // FIXME return value ?
 static int
-_check_socket_result(lua_State *L, int err, int fd, int event, int ctx, lua_CFunction k) {
+_check_socket_result(lua_State *L, int err, int fd, int event, lua_KContext ctx, lua_KFunction k) {
 	switch (err) {
 	case EAGAIN:
 		break;
@@ -146,11 +146,10 @@ _socket_pipe(lua_State *L) {
 }
 
 static int
-_socket_read(lua_State *L) {
-	int fd = luaL_checkint(L, 1);
+_socket_readk(lua_State *L, int status, lua_KContext ctx) {
+	int fd = (int)luaL_checkinteger(L, 1);
 	size_t required = 0;
-	int ctx = 0;
-	if (lua_getctx(L, &ctx) == LUA_OK) {
+	if (status == LUA_OK) {
 		required = (size_t)luaL_optinteger(L, 2, 0);
 		lua_settop(L, 1);
 		if (required != 0) {
@@ -165,7 +164,7 @@ _socket_read(lua_State *L) {
 		int err = 0;
 		size_t n = _read(fd, buf, sizeof buf, &err);
 		if (n == 0 || (err != 0 && err != EAGAIN)) {
-			return _check_socket_result(L, err, fd, WEVENT_READ|WEVENT_ONESHOT, -1, _socket_read);
+			return _check_socket_result(L, err, fd, WEVENT_READ|WEVENT_ONESHOT, -1, _socket_readk);
 		}
 		lua_pushlstring(L, (char*)buf, (size_t)n);
 		return 1;
@@ -178,12 +177,17 @@ _socket_read(lua_State *L) {
 		lua_pushlstring(L, (char*)buf, required);
 		return 1;
 	}
-	return _check_socket_result(L, err, fd, WEVENT_READ|WEVENT_ONESHOT, (int)n, _socket_read);
+	return _check_socket_result(L, err, fd, WEVENT_READ|WEVENT_ONESHOT, (int)n, _socket_readk);
 }
 
 static int
-_socket_write(lua_State *L) {
-	int fd = luaL_checkint(L, 1);
+_socket_read(lua_State *L) {
+	return _socket_readk(L, LUA_OK, 0);
+}
+
+static int
+_socket_writek(lua_State *L, int status, lua_KContext ctx) {
+	int fd = (int)luaL_checkinteger(L, 1);
 	byte_t *data;
 	size_t size;
 	if (lua_isuserdata(L, 2)) {
@@ -199,8 +203,7 @@ _socket_write(lua_State *L) {
 		return 1;
 	}
 
-	int ctx = 0;
-	if (lua_getctx(L, &ctx) == LUA_YIELD) {
+	if (status == LUA_YIELD) {
 		size_t n = (size_t)ctx;
 		data += n;
 		size -= n;
@@ -213,12 +216,17 @@ _socket_write(lua_State *L) {
 		return 1;
 	}
 
-	return _check_socket_result(L, err, fd, WEVENT_WRITE|WEVENT_ONESHOT, (int)n + ctx, _socket_write);
+	return _check_socket_result(L, err, fd, WEVENT_WRITE|WEVENT_ONESHOT, (lua_KContext)n + ctx, _socket_writek);
+}
+
+static int
+_socket_write(lua_State *L) {
+	return _socket_writek(L, LUA_OK, 0);
 }
 
 static int
 _socket_close(lua_State *L) {
-	int fd = luaL_checkint(L, 1);
+	int fd = (int)luaL_checkinteger(L, 1);
 	if (close(fd) == -1 && errno == EBADF) {
 		return luaL_error(L, "bad file descriptor");
 	}
@@ -227,13 +235,13 @@ _socket_close(lua_State *L) {
 
 static int
 _socket_accept(lua_State *L) {
-	int fd = luaL_checkint(L, 1);
+	int fd = (int)luaL_checkinteger(L, 1);
 	lua_settop(L, 1);
 	int err;
 	int conn = _accept(fd, &err);
 	if (conn == -1) {
 		if (err == EAGAIN) {
-			return _check_socket_result(L, err, fd, WEVENT_READ|WEVENT_ONESHOT, 0, _socket_accept);
+			return _check_socket_result(L, err, fd, WEVENT_READ|WEVENT_ONESHOT, 0, (lua_KFunction)_socket_accept);
 		}
 		lua_pushnil(L);
 		lua_pushstring(L, strerror(err));
@@ -435,7 +443,7 @@ _freeaddrinfo(lua_State *L) {
 	freeaddrinfo(res);
 }
 
-static int _connectk(lua_State *L);
+static int _connectk(lua_State *L, int status, lua_KContext ctx);
 
 static int
 _connect(lua_State *L, struct addrinfo *ai, int nerrs) {
@@ -480,10 +488,9 @@ _connect(lua_State *L, struct addrinfo *ai, int nerrs) {
 }
 
 static int
-_connectk(lua_State *L) {
-	int top = 0;
-	int ret = lua_getctx(L, &top);
-	assert(ret == LUA_YIELD);
+_connectk(lua_State *L, int status, lua_KContext ctx) {
+	assert(status == LUA_YIELD);
+	int top = (int)ctx;
 	lua_settop(L, top);
 	int fd = (int)lua_tointeger(L, -1);
 	int nerrs = (int)lua_tointeger(L, -2);
