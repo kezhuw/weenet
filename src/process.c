@@ -289,11 +289,6 @@ weenet_mailbox_init(struct weenet_mailbox *b) {
 	b->active = true;
 }
 
-inline static uint32_t
-weenet_mailbox_num(struct weenet_mailbox *b) {
-	return b->num;
-}
-
 static struct weenet_message *
 weenet_mailbox_pop(struct weenet_mailbox *b) {
 	weenet_atomic_lock(&b->lock);
@@ -475,28 +470,6 @@ weenet_account_retire(process_t pid) {
 	if (p == NULL) return;
 	weenet_process_retire(p);
 	weenet_process_release(p);
-}
-
-// Return retained process, named with 'name'.
-struct weenet_process *
-weenet_account_search(struct weenet_atom *name) {
-	(void)name;
-	// FIXME
-	return PROCESS_ZERO;
-}
-
-bool
-weenet_account_register(process_t pid, struct weenet_atom *name) {
-	(void)pid; (void)name;
-	// FIXME
-	return false;
-}
-
-bool
-weenet_account_unregister(struct weenet_atom *name) {
-	(void)name;
-	// FIXME
-	return true;
 }
 
 // Emphasize that the name is an atom, so it is safe to use without worrying its lifetime.
