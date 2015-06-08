@@ -92,6 +92,7 @@ union message_tags {
 };
 
 struct weenet_message {
+	struct weenet_message *next;
 	process_t source;
 	session_t session;
 	uintptr_t data;

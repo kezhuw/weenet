@@ -28,14 +28,41 @@ enum wmessage_flag {
 static const union message_tags WMSG_TAGS_MONITOR	= {.code = WMSG_CODE_MONITOR, .flag = WMSG_FLAG_INTERNAL};
 static const union message_tags WMSG_TAGS_RETIRED	= {.ridx = WMSG_RIDX_PROC, .code = WMSG_CODE_RETIRED, .flag = WMSG_FLAG_INTERNAL};
 
+struct message_queue {
+	struct weenet_message *first;
+	struct weenet_message **last;
+};
+
+inline static void
+_message_queue_init(struct message_queue *inbox) {
+	inbox->last = &inbox->first;
+}
+
+inline static bool
+_message_queue_empty(struct message_queue *inbox) {
+	return inbox->last == &inbox->first;
+}
+
+inline static void
+_message_queue_push(struct message_queue *inbox, struct weenet_message *m) {
+	*inbox->last = m;
+	inbox->last = &m->next;
+}
+
+inline static struct weenet_message *
+_message_queue_clear(struct message_queue *inbox) {
+	*inbox->last = NULL;
+	struct weenet_message *msgs = inbox->first;
+	_message_queue_init(inbox);
+	return msgs;
+}
+
 struct weenet_mailbox {
-	uint32_t num;
-	uint32_t size;
-	uint32_t head;
-	uint32_t rear;
+	int32_t size;
 	int32_t lock;
 	int32_t active;
-	struct weenet_message **mbox;
+	struct weenet_message *msgs;
+	struct message_queue inbox;
 };
 
 struct weenet_monitor {
@@ -253,122 +280,67 @@ weenet_monitor_unlink(struct weenet_monitor *m, struct weenet_process *p) {
 	m->num = m->len = 0;
 }
 
-static void
-weenet_mailbox_expand(struct weenet_mailbox *b) {
-	assert(weenet_atomic_locked(&b->lock));
-	assert(b->num == b->size);
-	uint32_t size = b->size;
-	uint32_t newsize = 2*size + 1;
-	b->mbox = wrealloc(b->mbox, sizeof(void*) * newsize);
-	// Mailbox is full, two situations:
-	//
-	//   1) ----- head(rear) --------
-	//   2) head(0) ------ rear(size)	rare, need no special handling
-	uint32_t rear = b->rear;
-	if (rear == b->head) {
-		// Situation 1.
-		assert(b->head == b->rear);
-		if (rear < size/2) {
-			// Copy (0 <---> rear) to (size <---> size+rear).
-			memcpy(b->mbox+size, b->mbox, sizeof(void*)*rear);
-			b->rear = size + rear;
-		} else {
-			// Copy (head <---> size) to rear.
-			uint32_t head = rear;
-			uint32_t n = size - head;
-			uint32_t newhead = newsize - n;
-			memcpy(b->mbox + newhead, b->mbox + head, sizeof(void*)*n);
-			b->head = newhead;
-		}
-	}
-	b->size = newsize;
-}
-
 inline static void
 weenet_mailbox_init(struct weenet_mailbox *b) {
 	b->active = true;
+	_message_queue_init(&b->inbox);
 }
 
 static struct weenet_message *
 weenet_mailbox_pop(struct weenet_mailbox *b) {
-	weenet_atomic_lock(&b->lock);
-	assert(b->active);		// Can't pop up message when inactive.
-	if (b->num == 0) {
-		b->active = false;
+	assert(b->active);
+	if (b->msgs == NULL) {
+		weenet_atomic_lock(&b->lock);
+		if (_message_queue_empty(&b->inbox)) {
+			b->active = false;
+			weenet_atomic_unlock(&b->lock);
+			return NULL;
+		}
+		struct weenet_message *msgs = _message_queue_clear(&b->inbox);
 		weenet_atomic_unlock(&b->lock);
-		return NULL;
+		b->msgs = msgs;
 	}
-	uint32_t head = b->head == b->size ? 0 : b->head;
-	struct weenet_message *msg = b->mbox[head++];
-	b->head = head;
-	b->num -= 1;
-	weenet_atomic_unlock(&b->lock);
-	return msg;
+	struct weenet_message *m = b->msgs;
+	b->msgs = m->next;
+	m->next = NULL;
+	return m;
 }
 
 static bool
 weenet_mailbox_push(struct weenet_mailbox *b, struct weenet_message *m) {
 	weenet_atomic_lock(&b->lock);
-	if (b->num == b->size) {
-		weenet_mailbox_expand(b);
-	}
-	uint32_t rear = b->rear == b->size ? 0 : b->rear;
-	b->mbox[rear++] = m;
-	b->rear = rear;
-	b->num += 1;
-	bool sleeping = !b->active;
-	if (sleeping) {
-		b->active = true;
-	}
+	_message_queue_push(&b->inbox, m);
 	weenet_atomic_unlock(&b->lock);
-	return sleeping;
+	weenet_atomic_inc(&b->size);
+	return weenet_atomic_cas(&b->active, false, true);
 }
 
 static void
 weenet_mailbox_insert(struct weenet_mailbox *b, struct weenet_message *m) {
-	//assert(b->active);		// Must be active. There is no reader.
-	weenet_atomic_lock(&b->lock);	// lock is needed, there are many writers.
-	if (b->num == b->size) {
-		weenet_mailbox_expand(b);
+	assert(b->active);		// Must be active. There is no reader.
+	for (;;) {
+		struct weenet_message *head = b->msgs;
+		m->next = head;
+		if (weenet_atomic_cas(&b->msgs, head, m)) {
+			break;
+		}
 	}
-	b->head = b->head == 0 ? b->size-1 : b->head-1;
-	b->mbox[b->head] = m;
-	b->num += 1;
-	weenet_atomic_unlock(&b->lock);
+	weenet_atomic_inc(&b->size);
 }
 
 static void
 weenet_mailbox_cleanup(struct weenet_mailbox *b) {
-	weenet_atomic_lock(&b->lock);
-	struct weenet_message **mbox = b->mbox;
-	uintreg_t num = (uintreg_t)b->num;
-	if (num == 0) goto done;
-	uintreg_t head = (uintreg_t)b->head;
-	uintreg_t rear = (uintreg_t)b->rear;
-	if (head < rear) {
-		do {
-			weenet_message_unref(mbox[head]);
-		} while (++head < rear);
-	} else if (head > rear) {
-		for (uintreg_t i=0; i<rear; ++i) {
-			weenet_message_unref(mbox[i]);
-		}
-		for (uintreg_t size = (uintreg_t)b->size; head < size; ++head) {
-			weenet_message_unref(mbox[head]);
-		}
-	} else {
-		assert(num == (uintreg_t)b->size);
-		for (uintreg_t i=0; i<num; ++i) {
-			weenet_message_unref(mbox[i]);
+	struct weenet_message *msg_groups[2];
+	msg_groups[0] = b->msgs;
+	msg_groups[1] = _message_queue_clear(&b->inbox);
+	for (int i=0; i<2; ++i) {
+		struct weenet_message *msgs = msg_groups[0];
+		while (msgs != NULL) {
+			struct weenet_message *m = msgs;
+			msgs = m->next;
+			weenet_message_unref(m);
 		}
 	}
-done:
-	b->num = 0;
-	b->size = 0;
-	b->mbox = NULL;
-	b->head = b->rear = 0;
-	weenet_atomic_unlock(&b->lock);
-	wfree(mbox);
 }
 
 struct weenet_account {
