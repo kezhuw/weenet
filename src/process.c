@@ -343,7 +343,7 @@ weenet_mailbox_cleanup(struct weenet_mailbox *b) {
 	}
 }
 
-struct weenet_account {
+struct weenet_registry {
 	size_t len;
 	size_t size;
 	int64_t lock;
@@ -360,67 +360,67 @@ struct weenet_account {
 
 void weenet_process_retire(struct weenet_process *p);
 
-static struct weenet_account *T;
+static struct weenet_registry *REGISTRY;
 
 static process_t
-weenet_account_enroll(struct weenet_process *p) {
+weenet_process_link(struct weenet_process *p) {
 	++p->refcnt;
-	struct weenet_account *t = T;
-	weenet_atomic_lock(&t->lock);
-	if (t->len == t->size) {
-		intreg_t index = t->free.first;
+	struct weenet_registry *registry = REGISTRY;
+	weenet_atomic_lock(&registry->lock);
+	if (registry->len == registry->size) {
+		intreg_t index = registry->free.first;
 		if (index != -1) {
-			assert(t->slot[index].proc == NULL);
-			t->free.first = t->slot[index].next;
-			t->slot[index].proc = p;
-			weenet_atomic_unlock(&t->lock);
+			assert(registry->slot[index].proc == NULL);
+			registry->free.first = registry->slot[index].next;
+			registry->slot[index].proc = p;
+			weenet_atomic_unlock(&registry->lock);
 			return (process_t)index;
 		} else {
-			size_t size = t->size;
+			size_t size = registry->size;
 			size += size/2+1;
-			t->slot = wrealloc(t->slot, size * sizeof(t->slot[0]));
-			t->size = size;
+			registry->slot = wrealloc(registry->slot, size * sizeof(registry->slot[0]));
+			registry->size = size;
 		}
 	}
-	assert(t->len < t->size);
-	size_t index = ++t->len;
-	t->slot[index].proc = p;
-	weenet_atomic_unlock(&t->lock);
+	assert(registry->len < registry->size);
+	size_t index = ++registry->len;
+	registry->slot[index].proc = p;
+	weenet_atomic_unlock(&registry->lock);
 	return (process_t)index;
 }
 
 static void
-weenet_account_unlink(process_t pid) {
+weenet_process_unlink(process_t pid) {
 	if (pid == PROCESS_ZERO) return;
-	struct weenet_account *t = T;
-	weenet_atomic_lock(&t->lock);
+	struct weenet_registry *registry = REGISTRY;
+	weenet_atomic_lock(&registry->lock);
 	intreg_t index = (intreg_t)pid;
-	assert((size_t)index <= t->len);
-	if (t->slot[index].proc == NULL) {
-		weenet_atomic_unlock(&t->lock);
+	assert((size_t)index <= registry->len);
+	if (registry->slot[index].proc == NULL) {
+		weenet_atomic_unlock(&registry->lock);
 		return;
 	}
-	t->slot[index].proc = NULL;
-	t->slot[index].next = -1;
-	if (t->free.first == -1) {
-		t->free.first = t->free.last = index;
+	registry->slot[index].proc = NULL;
+	registry->slot[index].next = -1;
+	if (registry->free.first == -1) {
+		registry->free.first = registry->free.last = index;
 	} else {
-		assert(t->slot[t->free.last].next == -1);
-		t->slot[t->free.last].next = index;
-		t->free.last = index;
+		assert(registry->slot[registry->free.last].next == -1);
+		registry->slot[registry->free.last].next = index;
+		registry->free.last = index;
 	}
-	weenet_atomic_unlock(&t->lock);
+	weenet_atomic_unlock(&registry->lock);
 }
 
 struct weenet_process *
-weenet_account_retain(process_t pid) {
-	struct weenet_account *t = T;
-	weenet_atomic_lock(&t->lock);
-	assert((size_t)pid <= t->len);
-	struct weenet_process *p = t->slot[pid].proc;
+weenet_process_find(process_t pid) {
+	struct weenet_registry *registry = REGISTRY;
+	weenet_atomic_lock(&registry->lock);
+	assert((size_t)pid <= registry->len);
+	struct weenet_process *p = registry->slot[pid].proc;
 	if (p != NULL) {
 		if (p->refcnt == 0) {
-			weenet_atomic_unlock(&t->lock);
+			weenet_atomic_unlock(&registry->lock);
 			return NULL;
 		}
 		// retained under lock
@@ -428,17 +428,17 @@ weenet_account_retain(process_t pid) {
 		if (refcnt == 1) {
 			// Someone just released it, about to delete it.
 			weenet_atomic_sub(&p->refcnt, 1);
-			weenet_atomic_unlock(&t->lock);
+			weenet_atomic_unlock(&registry->lock);
 			return NULL;
 		}
 	}
-	weenet_atomic_unlock(&t->lock);
+	weenet_atomic_unlock(&registry->lock);
 	return p;
 }
 
 void
-weenet_account_retire(process_t pid) {
-	struct weenet_process *p = weenet_account_retain(pid);
+weenet_process_kill(process_t pid) {
+	struct weenet_process *p = weenet_process_find(pid);
 	if (p == NULL) return;
 	weenet_process_retire(p);
 	weenet_process_release(p);
@@ -478,7 +478,7 @@ struct weenet_process *
 weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 	struct weenet_atom *atom = weenet_atom_new(name, strlen(name));
 	struct weenet_process *p = _process_new(atom);
-	p->id = weenet_account_enroll(p);
+	p->id = weenet_process_link(p);
 	struct weenet_process *running = _running_process();
 	_set_running_process(p);
 	p->service = weenet_service_new(atom, p, data, meta);
@@ -500,7 +500,7 @@ weenet_process_new(const char *name, uintptr_t data, uintptr_t meta) {
 
 static void
 weenet_process_delete(struct weenet_process *p) {
-	weenet_account_unlink(p->id);
+	weenet_process_unlink(p->id);
 	assert(weenet_atomic_get(&p->refcnt) == 0);
 	if (p->service != NULL) {
 		struct weenet_process *running = _running_process();
@@ -654,7 +654,7 @@ weenet_process_push(struct weenet_process *p, process_t src, session_t sid, uint
 
 session_t
 weenet_process_cast(struct weenet_process *p, process_t dst, uint32_t tags, uintptr_t data, uintptr_t meta) {
-	struct weenet_process *p1 = weenet_account_retain(dst);
+	struct weenet_process *p1 = weenet_process_find(dst);
 	if (p1 == NULL) {
 		_reclaim_resource(tags, data, meta);
 		return 0;
@@ -668,7 +668,7 @@ weenet_process_cast(struct weenet_process *p, process_t dst, uint32_t tags, uint
 
 session_t
 weenet_process_call(struct weenet_process *p, process_t dst, uint32_t tags, uintptr_t data, uintptr_t meta) {
-	struct weenet_process *out = weenet_account_retain(dst);
+	struct weenet_process *out = weenet_process_find(dst);
 	if (out == NULL) {
 		_reclaim_resource(tags, data, meta);
 		return 0;
@@ -685,7 +685,7 @@ weenet_process_call(struct weenet_process *p, process_t dst, uint32_t tags, uint
 
 bool
 weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t tags, uintptr_t data, uintptr_t meta) {
-	struct weenet_process *out = weenet_account_retain(dst);
+	struct weenet_process *out = weenet_process_find(dst);
 	if (out == NULL) {
 		_reclaim_resource(tags, data, meta);
 		return false;
@@ -697,7 +697,7 @@ weenet_process_send(process_t dst, process_t src, session_t sid, uint32_t tags, 
 
 session_t
 weenet_process_request(process_t pid, uint32_t ridx, uint32_t code, uintptr_t data, uintptr_t meta) {
-	struct weenet_process *out = weenet_account_retain(pid);
+	struct weenet_process *out = weenet_process_find(pid);
 	if (out == NULL) {
 		_free_resource(ridx, data, meta);
 		return 0;
@@ -728,7 +728,7 @@ weenet_process_response(process_t pid, session_t session, uint32_t ridx, uint32_
 
 bool
 weenet_process_forward(process_t dst, struct weenet_message *m) {
-	struct weenet_process *p = weenet_account_retain(dst);
+	struct weenet_process *p = weenet_process_find(dst);
 	if (p == NULL) {
 		return false;
 	}
@@ -796,10 +796,10 @@ weenet_init_process() {
 	weenet_message_gc(WMSG_RIDX_PROC, NULL, _process_resource_release);
 	weenet_message_gc(WMSG_RIDX_RAWMEM, NULL, _rawmem_resource_release);
 	weenet_message_gc(WMSG_RIDX_MEMORY, NULL, _memory_resource_release);
-	T = wcalloc(sizeof(*T));
-	T->free.first = -1;
-	T->size = 65536;
-	T->slot = wmalloc(T->size * sizeof(T->slot[0]));
-	T->slot[0].proc = NULL;
+	struct weenet_registry *registry = REGISTRY = wcalloc(sizeof(*REGISTRY));
+	registry->free.first = -1;
+	registry->size = 65536;
+	registry->slot = wmalloc(registry->size * sizeof(registry->slot[0]));
+	registry->slot[0].proc = NULL;
 	return 0;
 }
