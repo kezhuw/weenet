@@ -49,6 +49,16 @@ _message_queue_push(struct message_queue *inbox, struct weenet_message *m) {
 	inbox->last = &m->next;
 }
 
+inline static void
+_message_queue_insert(struct message_queue *inbox, struct weenet_message *m) {
+	if (_message_queue_empty(inbox)) {
+		_message_queue_push(inbox, m);
+	} else {
+		m->next = inbox->first;
+		inbox->first = m;
+	}
+}
+
 inline static struct weenet_message *
 _message_queue_clear(struct message_queue *inbox) {
 	*inbox->last = NULL;
@@ -318,13 +328,9 @@ weenet_mailbox_push(struct weenet_mailbox *b, struct weenet_message *m) {
 static void
 weenet_mailbox_insert(struct weenet_mailbox *b, struct weenet_message *m) {
 	assert(b->active);		// Must be active. There is no reader.
-	for (;;) {
-		struct weenet_message *head = b->msgs;
-		m->next = head;
-		if (weenet_atomic_cas(&b->msgs, head, m)) {
-			break;
-		}
-	}
+	weenet_atomic_lock(&b->lock);
+	_message_queue_insert(&b->inbox, m);
+	weenet_atomic_unlock(&b->lock);
 	weenet_atomic_inc(&b->size);
 }
 
