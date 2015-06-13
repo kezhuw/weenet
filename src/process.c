@@ -287,7 +287,7 @@ weenet_mailbox_init(struct weenet_mailbox *b) {
 }
 
 static struct weenet_message *
-weenet_mailbox_pop(struct weenet_mailbox *b) {
+weenet_mailbox_take(struct weenet_mailbox *b) {
 	assert(b->active);
 	if (b->msgs == NULL) {
 		weenet_atomic_lock(&b->lock);
@@ -584,7 +584,7 @@ weenet_process_self() {
 
 static bool
 weenet_process_work(struct weenet_process *p) {
-	struct weenet_message *msg = weenet_mailbox_pop(&p->mailbox);
+	struct weenet_message *msg = weenet_mailbox_take(&p->mailbox);
 	if (msg == NULL) return false;
 
 	if ((msg->tags.flag & WMSG_FLAG_INTERNAL)) {
